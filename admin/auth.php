@@ -44,12 +44,18 @@ $adminBroker = (new Broker($serverUrl, 'admin', $publicKey))
     ->withRedirectUri($redirectUri);
 
 /**
- * URL de login à donner au NAVIGATEUR — getLoginUrl() construit sur $serverUrl
- * (interne, ex. http://auth:8000) pour ses effets de bord (cookies PKCE), on
- * réécrit juste l'hôte vers $serverUrlPublic pour la redirection réelle.
+ * URL de login à donner au NAVIGATEUR — getLoginUrl() construit sur l'URL
+ * interne (ex. http://auth:8000) pour ses effets de bord (cookies PKCE), on
+ * réécrit juste l'hôte vers l'URL publique pour la redirection réelle. Relit
+ * les env vars plutôt que de les recevoir en paramètre : $serverUrl/
+ * $serverUrlPublic ci-dessus ne sont visibles que par partage implicite de
+ * scope via `require` (fragile, signalé par phpstan) — une fonction reste
+ * fiable quel que soit l'appelant.
  */
-function admin_public_login_url(Broker $broker, string $serverUrl, string $serverUrlPublic, string $returnUrl, array $scopes): string
+function admin_public_login_url(Broker $broker, string $returnUrl, array $scopes): string
 {
+    $serverUrl = getenv('SSO_SERVER') ?: 'http://localhost:8000';
+    $serverUrlPublic = getenv('SSO_SERVER_PUBLIC') ?: $serverUrl;
     $url = $broker->getLoginUrl($returnUrl, $scopes);
     return $serverUrl === $serverUrlPublic ? $url : substr_replace($url, $serverUrlPublic, 0, strlen($serverUrl));
 }

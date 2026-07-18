@@ -3,3 +3,5 @@ parameters:
     paths:
         - admin
         - src
+    excludePaths:
+        - admin/front/node_modules/*

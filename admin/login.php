@@ -17,5 +17,5 @@ if ($broker->isAuthenticated() && $broker->hasPermission(ADMIN_PERM)) {
     exit();
 }
 
-header('Location: ' . admin_public_login_url($broker, $serverUrl, $serverUrlPublic, 'front/', ['admin_access', 'profile']));
+header('Location: ' . admin_public_login_url($broker, 'front/', ['admin_access', 'profile']));
 exit();
