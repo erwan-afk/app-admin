@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: auth_admin
+    container_name: app_admin
     ports:
       - "8015:8015"
     environment:

@@ -1,5 +1,5 @@
 # Image de production — console admin (users/rôles/clients OAuth2), extraite
-# d'auth_global le 2026-07-18 (Projects/auth-admin/plan-phase-2-extraction-repo.md).
+# d'auth_global le 2026-07-18 (Projects/app-admin/plan-phase-2-extraction-repo.md).
 # Aucune BDD locale : proxy HTTP pur vers le serveur OAuth2 (auth_global).
 
 # Stage 1 : build du front (Vite → dist/, cf. admin/front/vite.config.ts outDir).

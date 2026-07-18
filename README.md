@@ -1,6 +1,6 @@
 # app-admin
 
-Console d'administration du groupe (users, rôles, clients OAuth2, architecture, transactions) — extraite d'`auth_global` le 2026-07-18 (`Projects/auth-admin/` dans le vault pour l'historique complet du chantier en 3 phases).
+Console d'administration du groupe (users, rôles, clients OAuth2, architecture, transactions) — extraite d'`auth_global` le 2026-07-18 (`Projects/app-admin/` dans le vault pour l'historique complet du chantier en 3 phases).
 
 Aucune base de données locale : ce repo est un client OAuth2 mince (Authorization Code + PKCE) qui parle exclusivement en HTTP à `auth_global` (le serveur d'autorisation).
 
