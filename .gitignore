@@ -1,0 +1,14 @@
+/vendor/
+/node_modules/
+/admin/front/node_modules/
+/dist/
+/admin/front/dist/
+*.lock
+!/composer.lock
+!/admin/front/package-lock.json
+.env
+.DS_Store
+Thumbs.db
+CLAUDE.md
+/.claude/
+/keys/private.pem

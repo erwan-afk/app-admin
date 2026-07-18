@@ -1,0 +1,671 @@
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ChevronRight, Trash2, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { api } from "@/lib/api";
+import type {
+  UserDetailResponse,
+  UserFormValues,
+  AppRole,
+  AdminPermission,
+} from "./types";
+import type { Grade } from "./types";
+
+const today = new Date().toISOString().split("T")[0];
+const NO_GRADE = "__none__";
+
+interface AppWithRoles {
+  id: string;
+  name: string;
+  roles: { id: number; name: string; label: string; permissions: AdminPermission[] }[];
+  permissions: AdminPermission[];
+}
+
+const EMPTY: UserFormValues = {
+  first_name: "",
+  last_name: "",
+  email: "",
+  hire_date: today,
+  email_perso: "",
+  is_codir: 0,
+  active: 1,
+};
+
+interface Props {
+  /** id pour éditer, null pour créer, undefined = fermé */
+  userId: number | null | undefined;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+export function UserFormDialog({ userId, onClose, onSaved }: Props) {
+  const open = userId !== undefined;
+  const isEdit = typeof userId === "number";
+
+  const [values, setValues] = useState<UserFormValues>(EMPTY);
+  const [assignments, setAssignments] = useState<
+    UserDetailResponse["assignments"]
+  >([]);
+  const [appRoles, setAppRoles] = useState<AppRole[]>([]);
+  const [appGrants, setAppGrants] = useState<UserDetailResponse["app_grants"]>(
+    [],
+  );
+  const [apps, setApps] = useState<AppWithRoles[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [permSaving, setPermSaving] = useState<string | null>(null);
+  const [roleAction, setRoleAction] = useState<{
+    appId: string;
+    type: "assign" | "revoke";
+    roleId?: number;
+    assignmentId?: number;
+  } | null>(null);
+  const [password, setPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [gradeSaving, setGradeSaving] = useState<number | null>(null);
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [permsOpen, setPermsOpen] = useState(false);
+
+  async function loadUser() {
+    if (!isEdit) return;
+    const [data, appsData, gradesData] = await Promise.all([
+      api.get<UserDetailResponse>(`user&id=${userId}`),
+      api.get<any[]>("apps_with_roles"),
+      api.get<Grade[]>("grades"),
+    ]);
+    setGrades(gradesData);
+    const u = data.user;
+    setValues({
+      first_name: u.first_name,
+      last_name: u.last_name,
+      email: u.email,
+      hire_date: u.hire_date || "",
+      email_perso: u.email_perso || "",
+      is_codir: u.is_codir,
+      active: u.active,
+    });
+    setAssignments((data.assignments || []).filter((a) => !a.valid_until));
+    setAppRoles(data.app_roles || []);
+    setAppGrants(data.app_grants || []);
+    setApps(
+      appsData.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        roles: a.roles || [],
+        permissions: a.permissions || [],
+      })),
+    );
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    if (!isEdit) {
+      setValues(EMPTY);
+      setAssignments([]);
+      setAppRoles([]);
+      setAppGrants([]);
+      setApps([]);
+      setPassword("");
+      return;
+    }
+    setLoading(true);
+    loadUser()
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, [userId, open, isEdit]);
+
+  const set = (k: keyof UserFormValues, v: string | number) =>
+    setValues((prev) => ({ ...prev, [k]: v }));
+
+  // ── Mot de passe ──
+  async function handleSetPassword() {
+    if (!password || !isEdit) return;
+    if (password.length < 8) {
+      toast.error("8 caracteres minimum");
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await api.put("set_user_password", { id: userId, password });
+      toast.success("Mot de passe defini");
+      setPassword("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  // ── Permissions par application (direct grants) ──
+  const hasGrant = (appId: string, permName: string) =>
+    appGrants.some(
+      (g) => g.app_id === appId && g.perm_name === permName && g.granted === 1,
+    );
+
+  async function togglePerm(appId: string, perm: AdminPermission) {
+    if (!isEdit) return;
+    const key = `${appId}:${perm.name}`;
+    setPermSaving(key);
+    try {
+      if (hasGrant(appId, perm.name)) {
+        await api.del("delete_app_grant", {
+          user_id: userId,
+          app_id: appId,
+          permission_id: perm.id,
+        });
+        toast.success(`Permission "${perm.label}" retirée`);
+      } else {
+        await api.post("upsert_app_grant", {
+          user_id: userId,
+          app_id: appId,
+          permission_id: perm.id,
+          granted: 1,
+          note: "Attribué depuis la console admin",
+        });
+        toast.success(`Permission "${perm.label}" accordée`);
+      }
+      await loadUser();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setPermSaving(null);
+    }
+  }
+
+  // ── Grade d'une assignation ──
+  async function updateAssignmentGrade(assignmentId: number, gradeId: string) {
+    setGradeSaving(assignmentId);
+    try {
+      await api.put("set_assignment_grade", {
+        assignment_id: assignmentId,
+        grade_id: gradeId === NO_GRADE ? undefined : Number(gradeId),
+      });
+      toast.success("Grade mis à jour");
+      await loadUser();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setGradeSaving(null);
+    }
+  }
+
+  // ── Rôles applicatifs ──
+  async function assignRole(appId: string, roleId: number) {
+    setRoleAction({ appId, type: "assign", roleId });
+    try {
+      await api.post("assign_app_role", {
+        user_id: userId,
+        app_id: appId,
+        app_role_id: roleId,
+      });
+      toast.success("Rôle attribué");
+      await loadUser();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setRoleAction(null);
+    }
+  }
+
+  async function revokeRole(assignmentId: number) {
+    setRoleAction({ appId: "", type: "revoke", assignmentId });
+    try {
+      await api.del("revoke_app_role", {
+        id: assignmentId,
+        user_id: userId,
+      });
+      toast.success("Rôle révoqué");
+      await loadUser();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setRoleAction(null);
+    }
+  }
+
+  // Regroupe les rôles par app
+  const rolesByApp: Record<string, AppRole[]> = {};
+  for (const r of appRoles) {
+    if (!rolesByApp[r.app_id]) rolesByApp[r.app_id] = [];
+    rolesByApp[r.app_id].push(r);
+  }
+
+  // Apps ayant des rôles configurés
+  const appIdsWithRoles = new Set(
+    apps.flatMap((a) => (a.roles.length ? [a.id] : [])),
+  );
+
+  // Une permission est-elle déjà accordée via un des rôles actifs du user
+  // sur cette app ? (indépendant des grants individuels, cf. hasGrant)
+  const roleGrantsPermission = (appId: string, permName: string) => {
+    const app = apps.find((a) => a.id === appId);
+    if (!app) return false;
+    const userRoleIds = new Set(
+      (rolesByApp[appId] || []).map((r) => r.app_role_id),
+    );
+    return app.roles.some(
+      (r) =>
+        userRoleIds.has(r.id) &&
+        r.permissions.some((p) => p.name === permName),
+    );
+  };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (isEdit) {
+        await api.put("update_user", { ...values, id: userId });
+        toast.success("Utilisateur mis à jour");
+      } else {
+        await api.post("create_user", {
+          ...values,
+          ...(password ? { password } : {}),
+        });
+        toast.success("Utilisateur crée");
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur réseau");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!isEdit) return;
+    const name = `${values.first_name} ${values.last_name}`;
+    if (!confirm(`Supprimer l'utilisateur « ${name} » ?`)) return;
+    try {
+      await api.del("delete_user", { id: userId });
+      toast.success("Utilisateur supprimé");
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>
+            {isEdit ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
+          </DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? "Mettre à jour les informations du compte."
+              : "Créer un nouveau compte utilisateur."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <p className="text-muted-foreground py-8 text-center text-sm">
+            Chargement…
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="first_name">Prénom</Label>
+                <Input
+                  id="first_name"
+                  value={values.first_name}
+                  required
+                  onChange={(e) => set("first_name", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="last_name">Nom</Label>
+                <Input
+                  id="last_name"
+                  value={values.last_name}
+                  required
+                  onChange={(e) => set("last_name", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={values.email}
+                required
+                onChange={(e) => set("email", e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="hire_date">Date d'embauche</Label>
+                <Input
+                  id="hire_date"
+                  type="date"
+                  value={values.hire_date}
+                  onChange={(e) => set("hire_date", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="email_perso">Email perso</Label>
+                <Input
+                  id="email_perso"
+                  value={values.email_perso}
+                  onChange={(e) => set("email_perso", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor="password">
+                  Mot de passe
+                  {isEdit ? " (laisser vide pour ne pas changer)" : ""}
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Min. 8 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              {isEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!password || passwordSaving}
+                  onClick={handleSetPassword}
+                >
+                  {passwordSaving ? "…" : "Definir"}
+                </Button>
+              )}
+            </div>
+
+            <div className="flex gap-6 pt-1">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={values.is_codir === 1}
+                  onCheckedChange={(c) => set("is_codir", c ? 1 : 0)}
+                />
+                Codir
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={values.active === 1}
+                  onCheckedChange={(c) => set("active", c ? 1 : 0)}
+                />
+                Actif
+              </label>
+            </div>
+
+            {/* Rôles par application */}
+            {isEdit && apps.length > 0 && (
+              <Collapsible
+                open={rolesOpen}
+                onOpenChange={setRolesOpen}
+                className="rounded-md border p-3"
+              >
+                <CollapsibleTrigger className="flex w-full items-center gap-1.5 text-sm font-medium">
+                  <ChevronRight
+                    className={cn(
+                      "size-4 transition-transform",
+                      rolesOpen && "rotate-90",
+                    )}
+                  />
+                  Rôles applicatifs
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  {apps
+                    .filter((app) => appIdsWithRoles.has(app.id))
+                    .map((app) => {
+                      const userRoles = rolesByApp[app.id] || [];
+                      const assignedRoleIds = new Set(
+                        userRoles.map((r) => r.app_role_id),
+                      );
+                      const availableRoles = app.roles.filter(
+                        (r) => !assignedRoleIds.has(r.id),
+                      );
+                      const busy =
+                        roleAction?.appId === app.id &&
+                        roleAction?.type === "assign";
+
+                      return (
+                        <div
+                          key={app.id}
+                          className="mb-2 rounded border p-2 last:mb-0"
+                        >
+                          <p className="text-muted-foreground mb-1 text-xs font-medium">
+                            {app.name}
+                          </p>
+                          {userRoles.length > 0 ? (
+                            <div className="mb-1.5 flex flex-wrap gap-1">
+                              {userRoles.map((r) => (
+                                <Badge
+                                  key={r.id}
+                                  variant="secondary"
+                                  className="gap-0.5 pr-0.5"
+                                >
+                                  {r.role_label}
+                                  <button
+                                    type="button"
+                                    className="hover:text-red-600 ml-0.5"
+                                    onClick={() => revokeRole(r.id)}
+                                    disabled={roleAction?.assignmentId === r.id}
+                                  >
+                                    {roleAction?.assignmentId === r.id ? (
+                                      "…"
+                                    ) : (
+                                      <X className="size-3" />
+                                    )}
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-muted-foreground mb-1 text-xs italic">
+                              Aucun rôle
+                            </p>
+                          )}
+                          {availableRoles.length > 0 && (
+                            <Select
+                              disabled={busy}
+                              onValueChange={(v) => assignRole(app.id, Number(v))}
+                            >
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue
+                                  placeholder={busy ? "…" : "+ Ajouter un rôle"}
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableRoles.map((r) => (
+                                  <SelectItem key={r.id} value={String(r.id)}>
+                                    {r.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {apps.filter((a) => appIdsWithRoles.has(a.id)).length ===
+                    0 && (
+                    <p className="text-muted-foreground text-xs">
+                      Aucune application avec des rôles configurés.
+                    </p>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {/* Permissions par application (accès applicatifs) */}
+            {isEdit && apps.some((a) => a.permissions.length > 0) && (
+              <Collapsible
+                open={permsOpen}
+                onOpenChange={setPermsOpen}
+                className="rounded-md border p-3"
+              >
+                <CollapsibleTrigger className="flex w-full items-center gap-1.5 text-sm font-medium">
+                  <ChevronRight
+                    className={cn(
+                      "size-4 transition-transform",
+                      permsOpen && "rotate-90",
+                    )}
+                  />
+                  Permissions applicatives
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  {apps
+                    .filter((app) => app.permissions.length > 0)
+                    .map((app) => (
+                      <div
+                        key={app.id}
+                        className="mb-2 rounded border p-2 last:mb-0"
+                      >
+                        <p className="text-muted-foreground mb-1 text-xs font-medium">
+                          {app.name}
+                        </p>
+                        <div className="space-y-1.5">
+                          {app.permissions.map((p) => {
+                            const key = `${app.id}:${p.name}`;
+                            const viaRole = roleGrantsPermission(
+                              app.id,
+                              p.name,
+                            );
+                            return (
+                              <label
+                                key={p.id}
+                                className="flex items-center gap-2 text-sm"
+                              >
+                                <Checkbox
+                                  checked={viaRole || hasGrant(app.id, p.name)}
+                                  disabled={viaRole || permSaving === key}
+                                  onCheckedChange={() => togglePerm(app.id, p)}
+                                />
+                                {permSaving === key ? "…" : p.label}
+                                {viaRole && (
+                                  <Badge
+                                    variant="outline"
+                                    className="px-1 py-0 text-[10px] font-normal"
+                                  >
+                                    via rôle
+                                  </Badge>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {isEdit && (
+              <div className="rounded-md border p-3">
+                <p className="mb-2 text-sm font-medium">
+                  Assignations{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({assignments.length})
+                  </span>
+                </p>
+                {assignments.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    Aucune assignation active.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {assignments.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <span>{a.node_name}</span>
+                        <span className="text-muted-foreground text-xs">
+                          ({a.node_type})
+                        </span>
+                        {a.is_primary === 1 && (
+                          <Badge variant="secondary">Principal</Badge>
+                        )}
+                        {a.is_node_manager === 1 && (
+                          <span title="Responsable de nœud (OKR)">👑</span>
+                        )}
+                        <Select
+                          value={a.grade_id ? String(a.grade_id) : NO_GRADE}
+                          disabled={gradeSaving === a.id}
+                          onValueChange={(v) => updateAssignmentGrade(a.id, v)}
+                        >
+                          <SelectTrigger className="ml-auto h-7 w-36 text-xs">
+                            <SelectValue placeholder="— Grade —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NO_GRADE}>— Aucun —</SelectItem>
+                            {grades.map((g) => (
+                              <SelectItem key={g.id} value={String(g.id)}>
+                                {g.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              {isEdit && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mr-auto text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="size-3.5" /> Supprimer
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={onClose}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "…" : isEdit ? "Enregistrer" : "Créer"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

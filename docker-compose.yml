@@ -1,0 +1,21 @@
+services:
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth_admin
+    ports:
+      - "8015:8015"
+    environment:
+      # Deux URLs distinctes — cf. admin/auth.php pour pourquoi.
+      SSO_SERVER: http://auth:8000
+      SSO_SERVER_PUBLIC: http://localhost:8000
+      ADMIN_REDIRECT_URI: http://localhost:8015/admin/callback.php
+    networks:
+      - default
+      - auth_global
+
+networks:
+  auth_global:
+    external: true
+    name: docker_default
