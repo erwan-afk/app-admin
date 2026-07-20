@@ -1,5 +1,4 @@
-import { Moon, Sun, Bell, LogOut, ChevronsUpDown } from "lucide-react";
-import { useUnreadCount } from "@/hooks/use-unread-count";
+import { Moon, Sun, LogOut, ChevronsUpDown } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -27,14 +26,11 @@ interface Props {
   dark: boolean;
   onToggleDark: () => void;
   onLogout: () => void;
-  onNotifications: () => void;
 }
 
-export function NavUser({ user, dark, onToggleDark, onLogout, onNotifications }: Props) {
+export function NavUser({ user, dark, onToggleDark, onLogout }: Props) {
   const { isMobile } = useSidebar();
   const label = user.name || user.email || "Utilisateur";
-
-  const unread = useUnreadCount();
 
   return (
     <SidebarMenu>
@@ -85,22 +81,6 @@ export function NavUser({ user, dark, onToggleDark, onLogout, onNotifications }:
               <DropdownMenuItem onSelect={onToggleDark}>
                 {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
                 {dark ? "Mode clair" : "Mode sombre"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onNotifications}>
-                <span className="relative">
-                  <Bell className="size-4" />
-                  {unread > 0 && (
-                    <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-                      {unread > 9 ? "9+" : unread}
-                    </span>
-                  )}
-                </span>
-                Notifications
-                {unread > 0 && (
-                  <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                    {unread}
-                  </span>
-                )}
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

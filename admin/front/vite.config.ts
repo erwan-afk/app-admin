@@ -18,11 +18,11 @@ export default defineConfig(() => ({
     // Le cookie SSO (scopé sur le host "localhost", pas le port) est transmis.
     proxy: {
       "/admin/api.php": {
-        target: "http://localhost:8003",
+        target: "http://localhost:8015",
         changeOrigin: false,
       },
       "/admin/proxy.php": {
-        target: "http://localhost:8003",
+        target: "http://localhost:8015",
         changeOrigin: false,
       },
     },

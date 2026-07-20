@@ -1,13 +1,29 @@
-import { useTheme } from "next-themes"
-import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { useSyncExternalStore } from "react";
+import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react";
+
+// Le dark mode de l'app est piloté par la classe `.dark` sur <html> (cf.
+// components/layout/Shell.tsx::useDarkMode()), pas par next-themes (qui
+// n'était de toute façon jamais monté via un Provider — useTheme() renvoyait
+// toujours "system", le toggle dark mode n'avait donc aucun effet sur les
+// toasts). On lit cette classe directement, comme app-objectifs.
+function useIsDark() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      return () => observer.disconnect();
+    },
+    () => document.documentElement.classList.contains("dark"),
+  );
+}
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const theme = useIsDark() ? "dark" : "light";
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       className="toaster group"
       icons={{
         success: (
@@ -32,6 +48,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          pointerEvents: "auto",
         } as React.CSSProperties
       }
       toastOptions={{
@@ -41,7 +58,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       {...props}
     />
-  )
-}
+  );
+};
 
-export { Toaster }
+export { Toaster };

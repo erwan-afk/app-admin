@@ -3,10 +3,11 @@
 // (admin/login.php, admin/callback.php, admin/logout.php). Ici on calcule juste
 // les bonnes URLs et on type l'utilisateur courant exposé par ?action=me.
 
-// En dev, la SPA tourne sur :5174 (Vite) alors que le backend admin est sur
-// :8003 → les redirections plein écran (login/logout) doivent viser :8003.
-// En prod, la SPA est servie PAR PHP (/admin/front/) donc origine relative.
-export const BACKEND_ORIGIN = import.meta.env.DEV ? "http://localhost:8003" : "";
+// En dev, la SPA tourne sur :5173 (Vite, port par défaut) alors que le
+// backend admin est sur :8015 → les redirections plein écran (login/logout)
+// doivent viser :8015. En prod, la SPA est servie PAR PHP (dist/) donc
+// origine relative.
+export const BACKEND_ORIGIN = import.meta.env.DEV ? "http://localhost:8015" : "";
 
 export const loginUrl = () => `${BACKEND_ORIGIN}/admin/login.php`;
 export const logoutUrl = () => `${BACKEND_ORIGIN}/admin/logout.php`;

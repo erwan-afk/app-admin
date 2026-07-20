@@ -1,19 +1,15 @@
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
-import { AdminLayout } from "@/components/layout/AdminLayout";
+import { RouterProvider } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { AuthGate } from "@/components/AuthGate";
+import { router } from "@/app/router";
 
 function App() {
   return (
-    <TooltipProvider>
-      <AuthProvider>
-        <AuthGate>
-          <AdminLayout />
-        </AuthGate>
-      </AuthProvider>
-      <Toaster richColors position="top-right" />
-    </TooltipProvider>
+    <AuthProvider>
+      <AuthGate>
+        <RouterProvider router={router} />
+      </AuthGate>
+    </AuthProvider>
   );
 }
 

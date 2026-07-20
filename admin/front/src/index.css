@@ -1,13 +1,49 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+
+/* DM Sans (police variable, auto-hébergée dans /public/fonts) — même police
+   que app-objectifs, aucune dépendance CDN à l'exécution. Sous-ensembles
+   latin + latin-ext, normal + italique. */
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-latin.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-latin-ext.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-italic-latin.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-italic-latin-ext.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'DM Sans', ui-monospace, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +75,24 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+    /* Statuts sémantiques (mêmes tokens que app-objectifs) — bon/à
+     * accélérer/en retard, pour homogénéité si des badges d'état apparaissent
+     * un jour côté admin (ex. Applications/Services actifs vs désactivés). */
+    --color-good: var(--good);
+    --color-good-soft: var(--good-soft);
+    --color-warn: var(--warn);
+    --color-warn-soft: var(--warn-soft);
+    --color-bad: var(--bad);
+    --color-bad-soft: var(--bad-soft);
+    --color-info: var(--info);
+    --color-info-soft: var(--info-soft);
+    --color-primary-soft: var(--primary-soft);
+    --color-fg-soft: var(--fg-soft);
+    --color-border-soft: var(--border-soft);
+    --color-track: var(--track);
+    /* Toile de fond de la page, un cran plus sombre que --background (qui
+     * sert de gris "content" à l'intérieur des panneaux blancs). */
+    --color-desk: var(--desk);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -48,6 +102,13 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ── Thème (2026-07-19) ──────────────────────────────────────────
+ * Repris à l'identique du thème app-objectifs (preset shadcn violet fourni
+ * par Ethibaud) pour homogénéité visuelle entre les deux apps du groupe. Les
+ * tokens sous la ligne de séparation ne font pas partie du vocabulaire
+ * shadcn standard (statuts sémantiques good/warn/bad/info, paliers -soft) —
+ * pas de palette --node-* ici (spécifique à l'organigramme d'app-objectifs,
+ * sans usage côté admin). */
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -55,8 +116,8 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.488 0.243 264.376);
-    --primary-foreground: oklch(0.97 0.014 254.604);
+    --primary: oklch(0.496 0.265 301.924);
+    --primary-foreground: oklch(0.977 0.014 308.299);
     --secondary: oklch(0.967 0.001 286.375);
     --secondary-foreground: oklch(0.21 0.006 285.885);
     --muted: oklch(0.97 0 0);
@@ -67,20 +128,34 @@
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.809 0.105 251.813);
-    --chart-2: oklch(0.623 0.214 259.815);
-    --chart-3: oklch(0.546 0.245 262.881);
-    --chart-4: oklch(0.488 0.243 264.376);
-    --chart-5: oklch(0.424 0.199 265.638);
-    --radius: 0.45rem;
+    --chart-1: oklch(0.811 0.111 293.571);
+    --chart-2: oklch(0.606 0.25 292.717);
+    --chart-3: oklch(0.541 0.281 293.009);
+    --chart-4: oklch(0.491 0.27 292.581);
+    --chart-5: oklch(0.432 0.232 292.759);
+    --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.546 0.245 262.881);
-    --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-primary: oklch(0.558 0.288 302.321);
+    --sidebar-primary-foreground: oklch(0.977 0.014 308.299);
+    --sidebar-accent: oklch(0.94 0 0);
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    /* ── Ajouts hors preset shadcn (repris app-objectifs) ── */
+    --good: #10a37f;
+    --good-soft: #e6f6f1;
+    --warn: #e08600;
+    --warn-soft: #fbf1de;
+    --bad: #ef4444;
+    --bad-soft: #fdeaea;
+    --info: #3b82f6;
+    --info-soft: #e8f0fe;
+    --primary-soft: #f1ecfe;
+    --fg-soft: #98a0ab;
+    --border-soft: #eef0f3;
+    --track: #eceef1;
+    --desk: #ebe6f6;
 }
 
 .dark {
@@ -90,8 +165,8 @@
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.205 0 0);
     --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.424 0.199 265.638);
-    --primary-foreground: oklch(0.97 0.014 254.604);
+    --primary: oklch(0.438 0.218 303.724);
+    --primary-foreground: oklch(0.977 0.014 308.299);
     --secondary: oklch(0.274 0.006 286.033);
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.269 0 0);
@@ -102,19 +177,33 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.809 0.105 251.813);
-    --chart-2: oklch(0.623 0.214 259.815);
-    --chart-3: oklch(0.546 0.245 262.881);
-    --chart-4: oklch(0.488 0.243 264.376);
-    --chart-5: oklch(0.424 0.199 265.638);
+    --chart-1: oklch(0.811 0.111 293.571);
+    --chart-2: oklch(0.606 0.25 292.717);
+    --chart-3: oklch(0.541 0.281 293.009);
+    --chart-4: oklch(0.491 0.27 292.581);
+    --chart-5: oklch(0.432 0.232 292.759);
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.623 0.214 259.815);
-    --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
+    --sidebar-primary: oklch(0.627 0.265 303.9);
+    --sidebar-primary-foreground: oklch(0.977 0.014 308.299);
     --sidebar-accent: oklch(0.269 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    /* ── Ajouts hors preset shadcn (repris app-objectifs) ── */
+    --good: #2dd4a7;
+    --good-soft: #13251f;
+    --warn: #f0a030;
+    --warn-soft: #2e2412;
+    --bad: #f87171;
+    --bad-soft: #2e1a1a;
+    --info: #60a5fa;
+    --info-soft: #16233a;
+    --primary-soft: #241a3d;
+    --fg-soft: #6a727e;
+    --border-soft: #20242b;
+    --track: #2b3038;
+    --desk: #09090b;
 }
 
 @layer base {
@@ -122,7 +211,7 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-desk text-foreground;
     }
   html {
     @apply font-sans;
