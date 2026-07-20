@@ -132,7 +132,7 @@ export function ClientsPage({ kind }: { kind: ClientKind }) {
   const activeCount = apps.filter((a) => a.active === 1).length;
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-full">
       {/* Liste */}
       <aside className="flex w-64 shrink-0 flex-col border-r">
         <div className="space-y-2 border-b p-3">

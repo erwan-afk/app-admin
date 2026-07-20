@@ -1,0 +1,452 @@
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Crown, Mail, Phone, ShieldCheck, ShieldAlert, Pencil, Trash2, KeyRound, Copy } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { api } from "@/lib/api";
+import { euros, MONTHS_FR } from "@/lib/format";
+import type { UserDetailResponse } from "./types";
+
+interface Props {
+  userId: number;
+  onEdit: () => void;
+  onDeleted: () => void;
+}
+
+function initials(first: string, last: string): string {
+  return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
+}
+
+function fmtDate(d: string | null): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+function fmtDateTime(d: string | null): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+}
+
+function fmtPeriod(period: string): string {
+  const y = period.slice(0, 4);
+  const m = Number(period.slice(4, 6));
+  return `${MONTHS_FR[m - 1]} ${y}`;
+}
+
+/** Ancienneté en années + mois depuis hire_date, jusqu'à disabled_at si sorti. */
+function tenure(hireDate: string | null, disabledAt: string | null): string {
+  if (!hireDate) return "—";
+  const start = new Date(hireDate);
+  const end = disabledAt ? new Date(disabledAt) : new Date();
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months -= 1;
+  months = Math.max(0, months);
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  if (years === 0) return `${rem} mois`;
+  if (rem === 0) return `${years} an${years > 1 ? "s" : ""}`;
+  return `${years} an${years > 1 ? "s" : ""} et ${rem} mois`;
+}
+
+/** Profil employé en lecture (panneau droit du master-detail Utilisateurs).
+ *  Les mutations (champs cœur, mot de passe, rôles/permissions, assignations)
+ *  restent dans UserFormDialog — ce composant ne fait qu'afficher, "Modifier"
+ *  rouvre le dialog existant sur cet id. */
+export function UserProfile({ userId, onEdit, onDeleted }: Props) {
+  const [data, setData] = useState<UserDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [revealedPassword, setRevealedPassword] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await api.get<UserDetailResponse>(`user&id=${userId}`));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur de chargement");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleDelete() {
+    if (!data) return;
+    const name = `${data.user.first_name} ${data.user.last_name}`;
+    if (!confirm(`Supprimer l'utilisateur « ${name} » ?`)) return;
+    try {
+      await api.del("delete_user", { id: userId });
+      toast.success("Utilisateur supprimé");
+      onDeleted();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  }
+
+  async function handleRegeneratePassword() {
+    if (!data) return;
+    const name = `${data.user.first_name} ${data.user.last_name}`;
+    if (!confirm(`Régénérer le mot de passe de « ${name} » ? L'ancien cessera de fonctionner.`)) return;
+    setRegenerating(true);
+    try {
+      const res = await api.post<{ password: string }>("regenerate_user_password", { id: userId });
+      setRevealedPassword(res.password);
+      toast.success("Mot de passe régénéré");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur réseau");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function copyPassword() {
+    if (!revealedPassword) return;
+    try {
+      await navigator.clipboard.writeText(revealedPassword);
+      toast.success("Mot de passe copié dans le presse-papiers");
+    } catch {
+      toast.error("Copie impossible — sélectionnez et copiez manuellement");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4 p-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-14 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { user, credentials, assignments, app_roles, app_grants, payfit_cost } = data;
+  const primary = assignments.find((a) => a.is_primary === 1 && !a.valid_until) ?? assignments[0];
+
+  const grantsByApp = new Map<string, { app_name: string; grants: typeof app_grants }>();
+  for (const g of app_grants.filter((g) => g.granted === 1)) {
+    if (!grantsByApp.has(g.app_id)) grantsByApp.set(g.app_id, { app_name: g.app_slug, grants: [] });
+    grantsByApp.get(g.app_id)!.grants.push(g);
+  }
+  const rolesByApp = new Map<string, { app_name: string; roles: typeof app_roles }>();
+  for (const r of app_roles) {
+    if (!rolesByApp.has(r.app_id)) rolesByApp.set(r.app_id, { app_name: r.app_name, roles: [] });
+    rolesByApp.get(r.app_id)!.roles.push(r);
+  }
+  const appIds = new Set([...rolesByApp.keys(), ...grantsByApp.keys()]);
+
+  return (
+    <div className="mx-auto max-w-3xl p-6">
+      {/* Header */}
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Avatar className="size-14">
+            {user.photo && <AvatarImage src={user.photo} alt="" />}
+            <AvatarFallback className="text-lg font-medium">
+              {initials(user.first_name, user.last_name)}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">
+                {user.first_name} {user.last_name}
+              </h1>
+              {user.is_codir === 1 && (
+                <Badge variant="secondary" className="gap-1">
+                  <Crown className="size-3" /> Codir
+                </Badge>
+              )}
+              {user.active === 1 ? (
+                <Badge variant="secondary">Actif</Badge>
+              ) : (
+                <Badge variant="outline">Inactif</Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground text-sm">
+              {[primary?.grade, primary?.node_name].filter(Boolean).join(" · ") || "Non affecté"}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" size="sm" onClick={onEdit}>
+            <Pencil className="size-3.5" /> Modifier
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+            onClick={handleDelete}
+          >
+            <Trash2 className="size-3.5" /> Supprimer
+          </Button>
+        </div>
+      </div>
+
+      <Tabs defaultValue="identite">
+        {/* variant="line" (soulignement) plutôt que le pill par défaut : avec
+            5 libellés dont certains longs, le pill par défaut n'offre aucune
+            séparation visuelle entre onglets inactifs (seul l'actif a un
+            fond) — illisible à cette densité, cf. retour Ethibaud
+            "j'arrive pas à les distinguer, tout est collé" (2026-07-19). */}
+        <TabsList variant="line" className="w-full justify-start border-b">
+          <TabsTrigger value="identite">Identité</TabsTrigger>
+          <TabsTrigger value="poste">Poste & Organisation</TabsTrigger>
+          <TabsTrigger value="rh">RH · Payfit</TabsTrigger>
+          <TabsTrigger value="acces">Accès applicatifs</TabsTrigger>
+          <TabsTrigger value="securite">Sécurité</TabsTrigger>
+        </TabsList>
+
+        {/* Identité */}
+        <TabsContent value="identite" className="mt-4">
+          <Card>
+            <CardContent className="grid grid-cols-2 gap-4 p-4 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Email professionnel</p>
+                <p className="flex items-center gap-1.5 font-medium">
+                  <Mail className="size-3.5" /> {user.email}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Email personnel</p>
+                <p className="flex items-center gap-1.5 font-medium">
+                  <Phone className="size-3.5" /> {user.email_perso || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Date d'embauche</p>
+                <p className="font-medium">{fmtDate(user.hire_date)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">
+                  {user.disabled_at ? "Date de sortie" : "Ancienneté"}
+                </p>
+                <p className="font-medium">
+                  {user.disabled_at
+                    ? fmtDate(user.disabled_at)
+                    : tenure(user.hire_date, user.disabled_at)}
+                </p>
+              </div>
+              <div className="col-span-2 border-t pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={regenerating}
+                  onClick={handleRegeneratePassword}
+                >
+                  <KeyRound className="size-3.5" /> Régénérer le mot de passe
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Poste & Organisation */}
+        <TabsContent value="poste" className="mt-4 space-y-3">
+          {assignments.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Aucune assignation.</p>
+          ) : (
+            assignments.map((a) => (
+              <Card key={a.id}>
+                <CardContent className="flex items-center justify-between p-4 text-sm">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium">{a.node_name}</span>
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        {a.node_type}
+                      </Badge>
+                      {a.is_primary === 1 && !a.valid_until && (
+                        <Badge variant="secondary" className="text-[10px] font-normal">
+                          Principal
+                        </Badge>
+                      )}
+                      {a.is_node_manager === 1 && (
+                        <Badge variant="outline" className="gap-1 text-[10px] font-normal">
+                          <Crown className="size-3" /> Responsable
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      {a.grade ? `${a.grade} · ` : ""}
+                      depuis le {fmtDate(a.valid_from)}
+                      {a.valid_until ? ` · clôturée le ${fmtDate(a.valid_until)}` : ""}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        {/* RH · Payfit */}
+        <TabsContent value="rh" className="mt-4 space-y-3">
+          <Card>
+            <CardContent className="grid grid-cols-2 gap-4 p-4 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Matricule</p>
+                <p className="font-medium">{user.matricule || "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Équipe Payfit</p>
+                <p className="font-medium">{user.team_name || "—"}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-muted-foreground text-xs">Statut contrat</p>
+                <p className="font-medium">
+                  {user.payfit_id
+                    ? user.disabled_at
+                      ? "Sorti (Payfit)"
+                      : "Actif (synchronisé Payfit)"
+                    : "Compte manuel (pas de contrat Payfit)"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {payfit_cost && (
+            <Card>
+              <CardContent className="p-4 text-sm">
+                <p className="text-muted-foreground text-xs">
+                  Coût employeur mensuel — {fmtPeriod(payfit_cost.period)}
+                </p>
+                <p className="text-lg font-semibold">{euros(payfit_cost.net, 2)}</p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Coût total employeur (charges patronales comprises), pas le salaire net versé
+                  au collaborateur — calculé depuis le grand livre Payfit (comptes de charge
+                  classe 6).
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Accès applicatifs */}
+        <TabsContent value="acces" className="mt-4 space-y-3">
+          {appIds.size === 0 ? (
+            <p className="text-muted-foreground text-sm">Aucun accès applicatif.</p>
+          ) : (
+            Array.from(appIds).map((appId) => {
+              const roles = rolesByApp.get(appId);
+              const grants = grantsByApp.get(appId);
+              return (
+                <Card key={appId}>
+                  <CardContent className="space-y-2 p-4 text-sm">
+                    <p className="font-medium">{roles?.app_name || grants?.app_name || appId}</p>
+                    {roles && roles.roles.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {roles.roles.map((r) => (
+                          <Badge key={r.id} variant="secondary">
+                            {r.role_label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {grants && grants.grants.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {grants.grants.map((g) => (
+                          <Badge key={g.permission_id} variant="outline">
+                            {g.perm_label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
+        </TabsContent>
+
+        {/* Sécurité */}
+        <TabsContent value="securite" className="mt-4">
+          <Card>
+            <CardContent className="grid grid-cols-2 gap-4 p-4 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Statut du compte</p>
+                <p className="flex items-center gap-1.5 font-medium">
+                  {credentials?.creation_status === "activated" ? (
+                    <ShieldCheck className="size-3.5 text-emerald-600" />
+                  ) : (
+                    <ShieldAlert className="size-3.5 text-muted-foreground" />
+                  )}
+                  {credentials?.creation_status === "activated"
+                    ? "Activé"
+                    : credentials?.creation_status === "created"
+                      ? "Créé, jamais connecté"
+                      : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Dernière connexion</p>
+                <p className="font-medium">{fmtDateTime(credentials?.last_login_at ?? null)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Tentatives échouées</p>
+                <p className="font-medium">{credentials?.failed_login_attempts ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Verrouillé jusqu'à</p>
+                <p className="font-medium">{fmtDateTime(credentials?.locked_until ?? null)}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={revealedPassword !== null} onOpenChange={(o) => !o && setRevealedPassword(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nouveau mot de passe généré</DialogTitle>
+            <DialogDescription>
+              Copiez-le maintenant : il ne sera plus jamais affiché. Transmettez-le à la personne
+              uniquement si elle ne peut pas utiliser la connexion Google.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <Input
+              readOnly
+              value={revealedPassword ?? ""}
+              className="font-mono text-xs"
+              onFocus={(e) => e.target.select()}
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={copyPassword}
+              aria-label="Copier le mot de passe"
+            >
+              <Copy className="size-4" />
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setRevealedPassword(null)}>
+              J'ai copié le mot de passe, fermer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

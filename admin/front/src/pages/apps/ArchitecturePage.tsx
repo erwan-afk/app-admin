@@ -24,15 +24,14 @@ export function ArchitecturePage() {
   }, [loadApps]);
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] p-6">
-      <h1 className="mb-4 text-xl font-semibold">Architecture</h1>
+    <div className="h-full">
       {!loaded ? null : apps.length === 0 ? (
-        <div className="text-muted-foreground flex h-[calc(100%-3rem)] flex-col items-center justify-center gap-2">
+        <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-2">
           <AppWindow className="size-10 opacity-30" />
           <p>Aucune application</p>
         </div>
       ) : (
-        <div className="h-[calc(100%-3rem)]">
+        <div className="h-full">
           <AppArchitectureChart apps={apps} onChanged={loadApps} />
         </div>
       )}

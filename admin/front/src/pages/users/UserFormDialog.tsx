@@ -284,10 +284,9 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
         await api.put("update_user", { ...values, id: userId });
         toast.success("Utilisateur mis à jour");
       } else {
-        await api.post("create_user", {
-          ...values,
-          ...(password ? { password } : {}),
-        });
+        // Mot de passe auto-généré côté serveur si absent (UserController::
+        // create) — connexion via Google par défaut, cf. retour Ethibaud.
+        await api.post("create_user", values);
         toast.success("Utilisateur crée");
       }
       onSaved();
@@ -385,21 +384,18 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
               </div>
             </div>
 
-            <div className="flex items-end gap-2">
-              <div className="flex-1 space-y-1.5">
-                <Label htmlFor="password">
-                  Mot de passe
-                  {isEdit ? " (laisser vide pour ne pas changer)" : ""}
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Min. 8 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              {isEdit && (
+            {isEdit && (
+              <div className="flex items-end gap-2">
+                <div className="flex-1 space-y-1.5">
+                  <Label htmlFor="password">Réinitialiser le mot de passe</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Min. 8 caracteres — rarement utile, connexion via Google par défaut"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -409,8 +405,8 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
                 >
                   {passwordSaving ? "…" : "Definir"}
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="flex gap-6 pt-1">
               <label className="flex items-center gap-2 text-sm">

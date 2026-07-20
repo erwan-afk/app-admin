@@ -67,10 +67,12 @@ $actionMap = [
     // body (résolu en _ID_) ; assign/unassign/manager/grade portent user_id ou
     // assignment_id dans le body vers des routes /users/assignments*.
     "users" => ["GET", "/users"],
+    "user_duplicates" => ["GET", "/users/duplicates"],
     "user" => ["GET", "/users/_ID_"],
     "create_user" => ["POST", "/users"],
     "update_user" => ["PUT", "/users/_ID_"],
     "set_user_password" => ["PUT", "/users/_ID_/password"],
+    "regenerate_user_password" => ["POST", "/users/_ID_/regenerate-password"],
     "delete_user" => ["DELETE", "/users/_ID_"],
     "assign_user" => ["POST", "/users/assignments"],
     "unassign_user" => ["DELETE", "/users/assignments"],
@@ -120,20 +122,12 @@ $actionMap = [
     "upsert_app_grant" => ["POST", "/users/_USER_/grants"],
     "delete_app_grant" => ["DELETE", "/users/_USER_/grants"],
 
-    // Transactions
-    "transactions" => ["GET", "/transactions"],
-    "transaction_stats" => ["GET", "/transactions/stats"],
-
-    // Provisioning
-    "list_structures" => ["GET", "/provisioning/structures"],
-    "provision_structure" => ["POST", "/provisioning/structures"],
-
-    // Consolidation (portée Doctrine, server/ ConsolidationController) — Lot 6.
-    // 'generate_snapshot' = calcul local (generateSnapshotFromLocalObjectives),
-    // distinct de POST /api/consolidation/snapshot (push structure, pushSnapshot).
-    "list_consolidation" => ["GET", "/consolidation"],
-    "generate_snapshot" => ["POST", "/consolidation/generate"],
-    "refresh_consolidation" => ["POST", "/consolidation/refresh"],
+    // Payfit — configurations multi-entreprise + synchro manuelle (AUT-8)
+    "payfit_companies" => ["GET", "/payfit-companies"],
+    "create_payfit_company" => ["POST", "/payfit-companies"],
+    "update_payfit_company" => ["PUT", "/payfit-companies/_ID_"],
+    "delete_payfit_company" => ["DELETE", "/payfit-companies/_ID_"],
+    "sync_payfit_company" => ["POST", "/payfit-companies/_ID_/sync"],
 
     // Auth
     "set_password" => ["POST", "/auth/set-password"],
