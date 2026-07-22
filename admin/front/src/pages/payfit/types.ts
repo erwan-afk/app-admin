@@ -1,3 +1,10 @@
+export interface AccountingSyncSummary {
+  company_id?: string;
+  period?: string;
+  fetched?: number;
+  error?: string;
+}
+
 export interface SyncSummary {
   company_id?: string;
   fetched?: number;
@@ -7,6 +14,7 @@ export interface SyncSummary {
   deactivated?: number;
   errors?: number;
   error?: string;
+  accounting?: AccountingSyncSummary;
 }
 
 export interface PayfitCompany {

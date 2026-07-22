@@ -43,8 +43,13 @@ export function PayfitPage() {
       setCompanies((prev) => prev.map((p) => (p.id === c.id ? updated : p)));
       const s = updated.last_sync_summary;
       if (s) {
+        const accounting = s.accounting?.error
+          ? `, masse salariale échouée (${s.accounting.error})`
+          : s.accounting
+            ? `, ${s.accounting.fetched ?? 0} écriture(s) comptable(s)`
+            : "";
         toast.success(
-          `${c.label} : ${s.created ?? 0} créé(s), ${s.synced ?? 0} synchronisé(s), ${s.deactivated ?? 0} désactivé(s)${s.errors ? `, ${s.errors} erreur(s)` : ""}`,
+          `${c.label} : ${s.created ?? 0} créé(s), ${s.synced ?? 0} synchronisé(s), ${s.deactivated ?? 0} désactivé(s)${s.errors ? `, ${s.errors} erreur(s)` : ""}${accounting}`,
         );
       }
     } catch (e) {
@@ -144,6 +149,18 @@ export function PayfitPage() {
                       <p className="flex items-center gap-1.5 text-bad">
                         <CircleX className="size-3.5" />
                         {s.error}
+                      </p>
+                    )}
+                    {s?.accounting && !s.accounting.error && (
+                      <p className="mt-1 flex items-center gap-1.5 text-muted-foreground">
+                        <CircleCheck className="size-3.5 text-good" />
+                        Masse salariale {s.accounting.period} : {s.accounting.fetched ?? 0} écriture(s)
+                      </p>
+                    )}
+                    {s?.accounting?.error && (
+                      <p className="mt-1 flex items-center gap-1.5 text-bad">
+                        <CircleX className="size-3.5" />
+                        Masse salariale : {s.accounting.error}
                       </p>
                     )}
                   </div>
