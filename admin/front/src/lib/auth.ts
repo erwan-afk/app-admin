@@ -17,6 +17,7 @@ export interface CurrentUser {
   sub: string | number;
   email?: string;
   name?: string;
+  photo?: string | null;
   perms?: string[];
   roles?: string[];
   is_codir?: boolean;
