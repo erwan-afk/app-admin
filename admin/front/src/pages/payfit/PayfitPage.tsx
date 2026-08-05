@@ -70,9 +70,9 @@ export function PayfitPage() {
         if (s.promoted) {
           toast.success(`${s.promoted} adresse(s) email corrigée(s) depuis Payfit`);
         }
-        if (s.placeholders) {
+        if (s.derived || s.placeholders) {
           toast.warning(
-            `${s.placeholders} collaborateur(s) sans email professionnel dans Payfit — voir « Adresses professionnelles à corriger »`,
+            `${(s.derived ?? 0) + (s.placeholders ?? 0)} adresse(s) non vérifiée(s) — voir « Adresses professionnelles à corriger »`,
           );
         }
         if (s.email_conflicts) {
@@ -189,10 +189,17 @@ export function PayfitPage() {
                         {s.promoted} adresse(s) email corrigée(s) depuis Payfit
                       </p>
                     )}
+                    {!!s?.derived && (
+                      <p className="mt-1 flex items-center gap-1.5 text-bad">
+                        <MailWarning className="size-3.5" />
+                        {s.derived} adresse(s) devinée(s) depuis le nom — provisoires, à
+                        renseigner dans Payfit
+                      </p>
+                    )}
                     {!!s?.placeholders && (
                       <p className="mt-1 flex items-center gap-1.5 text-bad">
                         <MailWarning className="size-3.5" />
-                        {s.placeholders} sans email professionnel dans Payfit — à renseigner
+                        {s.placeholders} sans email exploitable — connexion impossible
                       </p>
                     )}
                     {!!s?.email_conflicts && (

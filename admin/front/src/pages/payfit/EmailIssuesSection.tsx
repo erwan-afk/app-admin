@@ -9,25 +9,34 @@ import { api } from "@/lib/api";
 import type { UserRow } from "../users/types";
 
 /**
- * Adresses professionnelles qui ne correspondent à aucune boîte réelle, et
- * correction sur place.
+ * Adresses professionnelles NON VÉRIFIÉES, et correction sur place.
  *
- * Deux provenances posent problème (`users.email_source`, migration 051
- * d'auth_global) :
- *   - `placeholder` : Payfit n'a aucun email professionnel pour cette personne,
- *     la synchro a posé une adresse technique `@non-renseigne.invalid` ;
- *   - `derived` : l'adresse a été INVENTÉE par l'ancienne règle de synchro
- *     (initiale + nom translittéré), retirée le 2026-08-05.
+ * Deux provenances (`users.email_source`, migration 051 d'auth_global) :
+ *   - `derived` : l'adresse a été devinée depuis le nom (initiale + nom), faute
+ *     d'email professionnel dans Payfit. C'est le cas le plus fréquent — Payfit
+ *     n'en avait aucun pour 50 collaborateurs sur 57 au 2026-08-05.
+ *   - `placeholder` : même la dérivation était impossible, la synchro a posé une
+ *     adresse technique `@non-renseigne.invalid` → connexion impossible.
  *
- * Dans les deux cas la conséquence est la même et elle était invisible : la
- * personne ne reçoit rien, ne peut pas se connecter, et son chiffre d'affaires
- * ne peut pas être rapproché de `report` puisque la jointure se fait sur
- * l'email. Trois adresses inventées cachaient 49 130 € de CA sur juillet 2026.
+ * Une adresse devinée est plausible mais non prouvée : si elle ne correspond à
+ * aucune boîte, la personne ne reçoit rien et son chiffre d'affaires n'est pas
+ * rapproché de `report`, dont la jointure se fait sur l'email. Trois adresses de
+ * ce type cachaient 49 130 € de CA sur juillet 2026, sans aucune erreur visible.
  *
- * Volontairement PAS de suggestion d'adresse pré-remplie : c'est précisément une
- * suggestion automatique (« initiale + nom ») qui a créé le problème. La vraie
- * boîte ne se devine pas.
+ * Deux partis pris :
+ *   - AUCUNE suggestion d'adresse pré-remplie : la vraie boîte ne se devine pas,
+ *     et c'est une suggestion automatique qui a créé le problème.
+ *   - Priorisation par nom composé, qui n'est pas une devinette : la règle
+ *     concatène le nom entier là où la vraie boîte le raccourcit
+ *     (`scharbonnier-hauser` contre `shauser`). Un nom en un seul mot tombe juste
+ *     la plupart du temps ; un nom composé ou à particule est exactement le cas
+ *     où elle échoue.
  */
+
+/** Nom composé, à particule ou à tiret = cas où la dérivation est peu fiable. */
+function nomCompose(u: UserRow): boolean {
+  return /[\s'-]/.test(u.last_name.trim());
+}
 export function EmailIssuesSection() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,12 +58,21 @@ export function EmailIssuesSection() {
     load();
   }, [load]);
 
-  const problemes = useMemo(
-    () =>
-      users.filter(
+  // Les cas peu fiables d'abord (placeholder, puis nom composé), pour que la
+  // liste soit exploitable même longue : avec 50 adresses devinées sur 57, un
+  // ordre alphabétique noierait les vrais suspects.
+  const problemes = useMemo(() => {
+    const rang = (u: UserRow) => (u.email_source === "placeholder" ? 0 : nomCompose(u) ? 1 : 2);
+    return users
+      .filter(
         (u) => u.active === 1 && (u.email_source === "derived" || u.email_source === "placeholder"),
-      ),
-    [users],
+      )
+      .sort((a, b) => rang(a) - rang(b) || a.last_name.localeCompare(b.last_name, "fr"));
+  }, [users]);
+
+  const aRisque = useMemo(
+    () => problemes.filter((u) => u.email_source === "placeholder" || nomCompose(u)).length,
+    [problemes],
   );
 
   // Comptes désactivés dans le même état : signalés en une ligne, sans occuper
@@ -117,12 +135,21 @@ export function EmailIssuesSection() {
         <CardContent className="p-4 text-xs">
           <p className="flex items-center gap-1.5 font-medium">
             <MailWarning className="size-4 text-bad" />
-            {problemes.length} adresse(s) professionnelle(s) inutilisable(s)
+            {problemes.length} adresse(s) professionnelle(s) non vérifiée(s)
+            {aRisque > 0 && `, dont ${aRisque} peu fiable(s)`}
           </p>
           <p className="text-muted-foreground mt-1.5">
-            Ces personnes ne reçoivent aucun courrier, ne peuvent pas se connecter, et leur
-            chiffre d'affaires n'est pas rapproché de <span className="font-mono">report</span> —
-            le rapprochement se fait sur l'email.
+            Payfit n'a pas d'email professionnel pour ces personnes : l'adresse a été devinée
+            depuis leur nom. Si elle ne correspond à aucune boîte, elles ne reçoivent rien et
+            leur chiffre d'affaires n'est pas rapproché de{" "}
+            <span className="font-mono">report</span> — le rapprochement se fait sur l'email.
+          </p>
+          <p className="text-muted-foreground mt-1.5">
+            Les <span className="font-medium">noms composés ou à particule</span> sont listés en
+            premier : la règle concatène le nom entier là où la vraie boîte le raccourcit
+            (<span className="font-mono">scharbonnier-hauser</span> contre{" "}
+            <span className="font-mono">shauser</span>). Un nom en un seul mot tombe juste la
+            plupart du temps.
           </p>
           <p className="text-muted-foreground mt-1.5">
             <span className="font-medium">Le mieux est de renseigner l'email professionnel dans
@@ -144,9 +171,11 @@ export function EmailIssuesSection() {
                     {u.first_name} {u.last_name}
                   </span>
                   {u.email_source === "placeholder" ? (
-                    <Badge variant="destructive">email pro manquant</Badge>
+                    <Badge variant="destructive">connexion impossible</Badge>
+                  ) : nomCompose(u) ? (
+                    <Badge variant="destructive">devinée · nom composé</Badge>
                   ) : (
-                    <Badge variant="destructive">adresse inventée</Badge>
+                    <Badge variant="secondary">devinée</Badge>
                   )}
                   {u.team_name && <Badge variant="outline">{u.team_name}</Badge>}
                 </div>

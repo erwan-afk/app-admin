@@ -46,15 +46,15 @@ function initials(first: string, last: string): string {
 function EmailSourceBadge({ source }: { source: UserDetail["email_source"] }) {
   if (source === "placeholder") {
     return (
-      <Badge variant="destructive" title="Payfit n'a pas d'email professionnel pour cette personne. Elle ne peut pas se connecter et son CA ne peut pas être rapproché : à renseigner dans Payfit.">
-        email pro manquant
+      <Badge variant="destructive" title="Aucune adresse exploitable : la synchro a posé une adresse technique non routable. Cette personne ne peut pas se connecter — renseigner son email professionnel dans Payfit.">
+        connexion impossible
       </Badge>
     );
   }
   if (source === "derived") {
     return (
-      <Badge variant="destructive" title="Adresse inventée par l'ancienne règle de synchro (initiale + nom) : elle n'existe dans aucune boîte. À corriger dans Payfit, la resynchro la remplacera.">
-        adresse inventée
+      <Badge variant="secondary" title="Adresse devinée depuis le nom (initiale + nom), faute d'email professionnel dans Payfit. Plausible mais non vérifiée : si elle ne correspond à aucune boîte, le CA de cette personne n'est pas rapproché de report. Renseigner Payfit remplacera l'adresse à la resynchro.">
+        adresse devinée
       </Badge>
     );
   }
