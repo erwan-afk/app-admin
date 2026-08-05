@@ -33,9 +33,24 @@ import type { UserRow } from "../users/types";
  *     où elle échoue.
  */
 
-/** Nom composé, à particule ou à tiret = cas où la dérivation est peu fiable. */
+/**
+ * Nom composé, à particule ou à tiret = cas où la dérivation est peu fiable.
+ *
+ * ⚠️ Tolère `last_name` absent ou nul. Le type le déclare `string`, mais il vient
+ * de `SELECT u.*` côté serveur : une valeur nulle en base arrive telle quelle en
+ * JSON. Sans ce garde-fou, un seul utilisateur sans nom levait une TypeError
+ * ici, React démontait toute la section — et comme elle est montée sur la page
+ * Payfit, la page entière devenait inutilisable, boutons « Modifier » compris,
+ * sans message d'erreur lisible. Défaut introduit le 2026-08-05 et corrigé le
+ * même jour.
+ */
 function nomCompose(u: UserRow): boolean {
-  return /[\s'-]/.test(u.last_name.trim());
+  return /[\s'-]/.test((u.last_name ?? "").trim());
+}
+
+/** Tri par nom, tolérant aux valeurs nulles (cf. nomCompose). */
+function parNom(a: UserRow, b: UserRow): number {
+  return (a.last_name ?? "").localeCompare(b.last_name ?? "", "fr");
 }
 export function EmailIssuesSection() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -67,7 +82,7 @@ export function EmailIssuesSection() {
       .filter(
         (u) => u.active === 1 && (u.email_source === "derived" || u.email_source === "placeholder"),
       )
-      .sort((a, b) => rang(a) - rang(b) || a.last_name.localeCompare(b.last_name, "fr"));
+      .sort((a, b) => rang(a) - rang(b) || parNom(a, b));
   }, [users]);
 
   const aRisque = useMemo(
@@ -91,7 +106,7 @@ export function EmailIssuesSection() {
       toast.error("Adresse invalide");
       return;
     }
-    if (email === u.email.toLowerCase()) {
+    if (email === (u.email ?? "").toLowerCase()) {
       toast.error("C'est déjà l'adresse enregistrée");
       return;
     }
