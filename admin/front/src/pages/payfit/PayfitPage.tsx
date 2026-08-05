@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Pencil, Trash2, CircleCheck, CircleX } from "lucide-react";
+import {
+  Plus,
+  RefreshCw,
+  Pencil,
+  Trash2,
+  CircleCheck,
+  CircleX,
+  MailWarning,
+  Users2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +17,7 @@ import { api } from "@/lib/api";
 import type { PayfitCompany } from "./types";
 import { PayfitCompanyDialog } from "./PayfitCompanyDialog";
 import { DuplicatesSection } from "./DuplicatesSection";
+import { EmailIssuesSection } from "./EmailIssuesSection";
 
 function fmtDateTime(d: string | null): string {
   if (!d) return "Jamais synchronisé";
@@ -20,6 +30,9 @@ export function PayfitPage() {
   const [syncing, setSyncing] = useState<number | null>(null);
   // undefined = fermé · null = création · PayfitCompany = édition
   const [editing, setEditing] = useState<PayfitCompany | null | undefined>(undefined);
+  // Une synchro peut créer des adresses `placeholder` ou en promouvoir : la
+  // liste des adresses à corriger doit se recharger après, pas rester périmée.
+  const [emailIssuesKey, setEmailIssuesKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,6 +54,7 @@ export function PayfitPage() {
     try {
       const updated = await api.post<PayfitCompany>("sync_payfit_company", { id: c.id });
       setCompanies((prev) => prev.map((p) => (p.id === c.id ? updated : p)));
+      setEmailIssuesKey((k) => k + 1);
       const s = updated.last_sync_summary;
       if (s) {
         const accounting = s.accounting?.error
@@ -51,6 +65,21 @@ export function PayfitPage() {
         toast.success(
           `${c.label} : ${s.created ?? 0} créé(s), ${s.synced ?? 0} synchronisé(s), ${s.deactivated ?? 0} désactivé(s)${s.errors ? `, ${s.errors} erreur(s)` : ""}${accounting}`,
         );
+        // Signalés en plus du succès : ils demandent une action humaine, un
+        // toast vert seul les ferait passer inaperçus.
+        if (s.promoted) {
+          toast.success(`${s.promoted} adresse(s) email corrigée(s) depuis Payfit`);
+        }
+        if (s.placeholders) {
+          toast.warning(
+            `${s.placeholders} collaborateur(s) sans email professionnel dans Payfit — voir « Adresses professionnelles à corriger »`,
+          );
+        }
+        if (s.email_conflicts) {
+          toast.warning(
+            `${s.email_conflicts} adresse(s) Payfit déjà portée(s) par un autre compte — doublon(s) à fusionner`,
+          );
+        }
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Synchronisation échouée");
@@ -151,6 +180,27 @@ export function PayfitPage() {
                         {s.error}
                       </p>
                     )}
+                    {/* Ces trois compteurs demandent une action humaine : ils
+                        restent visibles sur la carte, pas seulement dans le
+                        toast de la synchro qui disparaît. */}
+                    {!!s?.promoted && (
+                      <p className="mt-1 flex items-center gap-1.5 text-muted-foreground">
+                        <CircleCheck className="size-3.5 text-good" />
+                        {s.promoted} adresse(s) email corrigée(s) depuis Payfit
+                      </p>
+                    )}
+                    {!!s?.placeholders && (
+                      <p className="mt-1 flex items-center gap-1.5 text-bad">
+                        <MailWarning className="size-3.5" />
+                        {s.placeholders} sans email professionnel dans Payfit — à renseigner
+                      </p>
+                    )}
+                    {!!s?.email_conflicts && (
+                      <p className="mt-1 flex items-center gap-1.5 text-bad">
+                        <Users2 className="size-3.5" />
+                        {s.email_conflicts} adresse(s) déjà portée(s) par un autre compte — doublon
+                      </p>
+                    )}
                     {s?.accounting && !s.accounting.error && (
                       <p className="mt-1 flex items-center gap-1.5 text-muted-foreground">
                         <CircleCheck className="size-3.5 text-good" />
@@ -172,6 +222,11 @@ export function PayfitPage() {
       )}
 
       <PayfitCompanyDialog company={editing} onClose={() => setEditing(undefined)} onSaved={load} />
+
+      <div className="mt-8">
+        <p className="text-muted-foreground mb-3 text-sm">Adresses professionnelles à corriger</p>
+        <EmailIssuesSection key={emailIssuesKey} />
+      </div>
 
       <div className="mt-8">
         <p className="text-muted-foreground mb-3 text-sm">Doublons potentiels</p>

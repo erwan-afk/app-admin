@@ -8,6 +8,8 @@ export interface UserRow {
   first_name: string;
   last_name: string;
   email: string;
+  /** Provenance de `email` — cf. UserDetail.email_source (migration 051). */
+  email_source: "payfit" | "derived" | "placeholder" | "manual" | null;
   photo: string | null;
   grade: string | null;
   node_name: string | null;

@@ -14,6 +14,19 @@ export interface SyncSummary {
   deactivated?: number;
   errors?: number;
   error?: string;
+  /**
+   * Collaborateurs sans email professionnel dans Payfit : provisionnés avec une
+   * adresse technique `@non-renseigne.invalid`. Ils ne peuvent pas se connecter
+   * et leur CA ne peut pas être rapproché de `report` — à renseigner dans Payfit.
+   */
+  placeholders?: number;
+  /** Adresses inventées ou techniques remplacées par la vraie adresse Payfit. */
+  promoted?: number;
+  /**
+   * Adresse Payfit déjà portée par un AUTRE compte : non écrite, c'est le
+   * symptôme d'un doublon à fusionner (cf. la section Doublons ci-dessous).
+   */
+  email_conflicts?: number;
   accounting?: AccountingSyncSummary;
 }
 
