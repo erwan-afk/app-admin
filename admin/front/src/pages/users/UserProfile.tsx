@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Crown, Mail, Phone, ShieldCheck, ShieldAlert, Pencil, Trash2, KeyRound, Copy } from "lucide-react";
+import {
+  Crown,
+  Mail,
+  Phone,
+  ShieldCheck,
+  ShieldAlert,
+  Pencil,
+  Trash2,
+  KeyRound,
+  Copy,
+  Plus,
+  X,
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,6 +113,9 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [revealedPassword, setRevealedPassword] = useState<string | null>(null);
+  const [newProEmail, setNewProEmail] = useState("");
+  const [newProEmailLabel, setNewProEmailLabel] = useState("");
+  const [addingProEmail, setAddingProEmail] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,6 +171,38 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
     }
   }
 
+  async function handleAddProEmail() {
+    const email = newProEmail.trim();
+    if (!email) return;
+    setAddingProEmail(true);
+    try {
+      await api.post("create_user_pro_email", {
+        id: userId,
+        email,
+        label: newProEmailLabel.trim() || undefined,
+      });
+      setNewProEmail("");
+      setNewProEmailLabel("");
+      toast.success("Adresse ajoutée");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setAddingProEmail(false);
+    }
+  }
+
+  async function handleDisableProEmail(proEmailId: number, email: string) {
+    if (!confirm(`Désactiver l'adresse « ${email} » ?`)) return;
+    try {
+      await api.del("delete_user_pro_email", { id: userId, pro_email_id: proEmailId });
+      toast.success("Adresse désactivée");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4 p-6">
@@ -173,7 +220,8 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
 
   if (!data) return null;
 
-  const { user, credentials, assignments, app_roles, app_grants, payfit_cost } = data;
+  const { user, credentials, assignments, app_roles, app_grants, payfit_cost, pro_emails } = data;
+  const activeProEmails = pro_emails.filter((p) => p.active === 1);
   const primary = assignments.find((a) => a.is_primary === 1 && !a.valid_until) ?? assignments[0];
 
   const grantsByApp = new Map<string, { app_name: string; grants: typeof app_grants }>();
@@ -288,6 +336,68 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
                   onClick={handleRegeneratePassword}
                 >
                   <KeyRound className="size-3.5" /> Régénérer le mot de passe
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-3">
+            <CardContent className="space-y-3 p-4 text-sm">
+              <div>
+                <p className="font-medium">Adresses professionnelles secondaires</p>
+                <p className="text-muted-foreground text-xs">
+                  Adresses que cette personne utilise aussi. Servent à rapprocher son chiffre
+                  d'affaires de report ; son identifiant de connexion ne change pas.
+                </p>
+              </div>
+
+              {activeProEmails.length > 0 && (
+                <div className="space-y-1.5">
+                  {activeProEmails.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1 break-all font-mono text-xs">
+                        {p.email}
+                        {p.label && (
+                          <span className="text-muted-foreground ml-1.5 font-sans">
+                            ({p.label})
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0 text-muted-foreground hover:text-red-600"
+                        onClick={() => handleDisableProEmail(p.id, p.email)}
+                        aria-label="Désactiver"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 border-t pt-3">
+                <Input
+                  placeholder="adresse@exemple.com"
+                  value={newProEmail}
+                  onChange={(e) => setNewProEmail(e.target.value)}
+                  className="text-xs"
+                />
+                <Input
+                  placeholder="label (optionnel)"
+                  value={newProEmailLabel}
+                  onChange={(e) => setNewProEmailLabel(e.target.value)}
+                  className="w-32 text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={addingProEmail || !newProEmail.trim()}
+                  onClick={handleAddProEmail}
+                  className="shrink-0"
+                >
+                  <Plus className="size-3.5" /> Ajouter
                 </Button>
               </div>
             </CardContent>

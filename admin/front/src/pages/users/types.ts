@@ -112,6 +112,17 @@ export interface Grade {
   label: string;
 }
 
+/** Adresse professionnelle SECONDAIRE (migration 052 auth_global) — jamais
+ *  l'identifiant de connexion (`users.email`), utilisée uniquement pour
+ *  rapprocher le CA de `report`/HubSpot. */
+export interface ProEmail {
+  id: number;
+  user_id: number;
+  email: string;
+  label: string | null;
+  active: number;
+}
+
 export interface UserDetailResponse {
   user: UserDetail;
   credentials: Credentials | null;
@@ -119,6 +130,7 @@ export interface UserDetailResponse {
   app_roles: AppRole[];
   app_grants: AppGrant[];
   payfit_cost: PayfitCost | null;
+  pro_emails: ProEmail[];
 }
 
 // Payload des formulaires création / édition

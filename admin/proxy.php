@@ -79,6 +79,13 @@ $actionMap = [
     "set_node_manager" => ["POST", "/users/assignments/manager"],
     "set_assignment_grade" => ["PUT", "/users/assignments/grade"],
 
+    // Adresses professionnelles secondaires (migration 052, onglet Identité).
+    // _ID_ = l'utilisateur (comme "user" ci-dessus) ; _PRO_ = la ligne
+    // user_pro_emails ciblée par la désactivation.
+    "user_pro_emails" => ["GET", "/users/_ID_/pro-emails"],
+    "create_user_pro_email" => ["POST", "/users/_ID_/pro-emails"],
+    "delete_user_pro_email" => ["DELETE", "/users/_ID_/pro-emails/_PRO_"],
+
     // Apps CRUD
     // 'apps_with_roles' → route dédiée renvoyant l'arbre imbriqué
     // roles[]+permissions[] (AppController::indexWithRoles), distincte de
@@ -180,6 +187,8 @@ if ($action !== "" && isset($actionMap[$action])) {
         "_ROLE_" =>
             (string) ($input["app_role_id"] ??
                 ($input["role_id"] ?? ($_GET["role_id"] ?? ""))),
+        "_PRO_" =>
+            (string) ($input["pro_email_id"] ?? ($_GET["pro_email_id"] ?? "")),
     ];
 
     foreach ($replacements as $ph => $val) {
@@ -196,6 +205,7 @@ if ($action !== "" && isset($actionMap[$action])) {
         $qs["user_id"],
         $qs["app_id"],
         $qs["role_id"],
+        $qs["pro_email_id"],
     );
     // Pour les endpoints qui attendent des query params (ex: transactions?start=&end=)
     // on les passe dans la query string
