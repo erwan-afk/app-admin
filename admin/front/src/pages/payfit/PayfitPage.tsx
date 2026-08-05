@@ -126,7 +126,18 @@ export function PayfitPage() {
               <Card key={c.id}>
                 <CardContent className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    {/* `min-w-0` indispensable : sans lui, un flex item ne
+                        descend jamais sous la largeur intrinsèque de son
+                        contenu. Le masque de clé est une chaîne de points SANS
+                        espace, donc insécable — quand il est anormalement long
+                        (274 caractères le 2026-08-05, la clé n'étant pas
+                        déchiffrable, cf. la note vault), il poussait la ligne
+                        au-delà de la carte. `Card` étant en `overflow-hidden`,
+                        les boutons Synchroniser/Modifier/Supprimer étaient
+                        rognés et devenaient INATTEIGNABLES — on ne pouvait plus
+                        corriger la clé depuis l'interface, précisément quand il
+                        fallait le faire. `break-all` fait le reste. */}
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{c.label}</span>
                         {c.active === 1 ? (
@@ -135,7 +146,7 @@ export function PayfitPage() {
                           <Badge variant="outline">Inactif</Badge>
                         )}
                       </div>
-                      <p className="text-muted-foreground font-mono text-xs">
+                      <p className="text-muted-foreground font-mono text-xs break-all">
                         {c.api_key_masked}
                         {c.company_id ? ` · company_id=${c.company_id}` : ""} · @{c.email_domain}
                       </p>
