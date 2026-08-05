@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { euros, MONTHS_FR } from "@/lib/format";
-import type { UserDetailResponse } from "./types";
+import type { UserDetail, UserDetailResponse } from "./types";
 
 interface Props {
   userId: number;
@@ -28,6 +28,37 @@ interface Props {
 
 function initials(first: string, last: string): string {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
+}
+
+/**
+ * Signale une adresse professionnelle qui n'est pas fiable — provenance
+ * `email_source` posée par auth_global (migration 051).
+ *
+ * `derived` et `placeholder` sont les deux cas où l'adresse ne correspond à
+ * aucune boîte réelle : la personne ne reçoit rien, ne peut pas se connecter, et
+ * son CA ne peut pas être rapproché de `report` (la jointure se fait sur
+ * l'email). C'est resté invisible jusqu'au 2026-08-05, où 3 adresses inventées
+ * cachaient 49 130 € de CA — d'où ce badge.
+ *
+ * `payfit` et `manual` sont des états normaux : rien à afficher, on ne décore
+ * pas ce qui va bien.
+ */
+function EmailSourceBadge({ source }: { source: UserDetail["email_source"] }) {
+  if (source === "placeholder") {
+    return (
+      <Badge variant="destructive" title="Payfit n'a pas d'email professionnel pour cette personne. Elle ne peut pas se connecter et son CA ne peut pas être rapproché : à renseigner dans Payfit.">
+        email pro manquant
+      </Badge>
+    );
+  }
+  if (source === "derived") {
+    return (
+      <Badge variant="destructive" title="Adresse inventée par l'ancienne règle de synchro (initiale + nom) : elle n'existe dans aucune boîte. À corriger dans Payfit, la resynchro la remplacera.">
+        adresse inventée
+      </Badge>
+    );
+  }
+  return null;
 }
 
 function fmtDate(d: string | null): string {
@@ -224,8 +255,9 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
             <CardContent className="grid grid-cols-2 gap-4 p-4 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Email professionnel</p>
-                <p className="flex items-center gap-1.5 font-medium">
+                <p className="flex flex-wrap items-center gap-1.5 font-medium">
                   <Mail className="size-3.5" /> {user.email}
+                  <EmailSourceBadge source={user.email_source} />
                 </p>
               </div>
               <div>

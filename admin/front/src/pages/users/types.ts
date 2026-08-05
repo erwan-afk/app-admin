@@ -21,6 +21,17 @@ export interface UserDetail {
   first_name: string;
   last_name: string;
   email: string;
+  /**
+   * Provenance de `email` (auth_global, migration 051) :
+   *   payfit      — fournie par Payfit, source de vérité
+   *   derived     — INVENTÉE par l'ancienne règle initiale+nom : n'existe dans
+   *                 aucune boîte, casse le rapprochement du CA en silence
+   *   placeholder — adresse technique `@non-renseigne.invalid` : Payfit n'a pas
+   *                 d'email pro pour cette personne, elle ne peut pas se connecter
+   *   manual      — saisie ici : la synchro Payfit ne l'écrasera jamais
+   *   null        — inconnue (compte antérieur à la migration 051)
+   */
+  email_source: "payfit" | "derived" | "placeholder" | "manual" | null;
   email_perso: string | null;
   photo: string | null;
   hire_date: string | null;
