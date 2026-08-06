@@ -39,8 +39,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <Screen>
         <Loader2 className="text-muted-foreground size-5 animate-spin" />
         <p className="text-muted-foreground max-w-sm text-sm">
-          Le cockpit est réservé à l'administration globale — redirection vers
-          votre app structure…
+          La console admin est réservée à l'administration du groupe —
+          redirection vers Atlas…
         </p>
       </Screen>
     );

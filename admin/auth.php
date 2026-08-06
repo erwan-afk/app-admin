@@ -70,8 +70,36 @@ function admin_has_any_access(Broker $broker): bool
 }
 
 /**
+ * App vers laquelle renvoyer un compte authentifié SANS droit sur la console
+ * (2026-08-06) : Atlas, à laquelle tout le monde a accès — son modèle de droits
+ * est positionnel (un rattachement actif suffit, `user_app_grants` est vide pour
+ * le client `intranet`), là où la console admin exige `admin_access`.
+ *
+ * Avant, ce cas produisait une impasse : « Accès refusé » sans aucune sortie.
+ * Ethibaud, le 2026-08-06 : « tout le monde qui va se connecter va se prendre
+ * cette erreur, c'est pas du tout le but ».
+ *
+ * Surchargeable par `ATLAS_URL` (dev local, préprod). Retourne null si la cible
+ * est le host courant — sans ça, une valeur mal configurée boucle indéfiniment.
+ */
+function admin_fallback_app_url(): ?string
+{
+    $url = rtrim((string) (getenv('ATLAS_URL') ?: 'https://atlas.groupebenoitboitard.com'), '/');
+    if ($url === '') {
+        return null;
+    }
+    $target = parse_url($url, PHP_URL_HOST);
+    $current = $_SERVER['HTTP_HOST'] ?? '';
+    if ($target === null || ($current !== '' && strcasecmp((string) $target, (string) $current) === 0)) {
+        return null;
+    }
+    return $url;
+}
+
+/**
  * Gate pour les pages HTML : non connecté → redirige vers le login OAuth ;
- * sans 'admin_access' ni 'goals_access' → page 403.
+ * sans 'admin_access' ni 'goals_access' → renvoi vers Atlas (cf.
+ * admin_fallback_app_url()), et seulement à défaut une page 403.
  */
 function admin_guard_ui(Broker $broker): void
 {
@@ -81,6 +109,14 @@ function admin_guard_ui(Broker $broker): void
     }
 
     if (!admin_has_any_access($broker)) {
+        // Ne PAS laisser l'utilisateur en cul-de-sac : la console admin n'est
+        // pas le point d'entrée du groupe, Atlas l'est.
+        $fallback = admin_fallback_app_url();
+        if ($fallback !== null) {
+            header('Location: ' . $fallback);
+            exit();
+        }
+
         http_response_code(403);
         header('Content-Type: text/html; charset=utf-8');
         $user = $broker->getUser();
@@ -125,7 +161,15 @@ function admin_guard_api(Broker $broker): void
     if (!admin_has_any_access($broker)) {
         http_response_code(403);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['error' => 'Accès admin requis (admin_access ou goals_access)']);
+        // `redirect_url` (2026-08-06) : la SPA sait déjà l'exploiter — elle
+        // bascule alors sur l'écran « redirection… » au lieu de l'impasse
+        // « Accès refusé » (AuthContext.tsx, `status === "redirect"`). Ce
+        // chemin existait depuis ADR-008 mais aucun serveur ne renvoyait plus
+        // la clé : le front avait un cas mort.
+        echo json_encode(array_filter([
+            'error' => 'Accès admin requis (admin_access ou goals_access)',
+            'redirect_url' => admin_fallback_app_url(),
+        ], static fn($v) => $v !== null));
         exit();
     }
 }
