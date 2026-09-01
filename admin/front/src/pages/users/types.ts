@@ -103,6 +103,8 @@ export interface AdminPermission {
   id: number;
   name: string;
   label: string;
+  group: string | null;
+  default_on: number;
 }
 
 // Grade d'assignation — GET /grades (UserController::grades()). Vivait dans

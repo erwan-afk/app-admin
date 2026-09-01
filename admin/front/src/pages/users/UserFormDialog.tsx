@@ -570,59 +570,79 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
                   />
                   Permissions applicatives
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3">
+                <CollapsibleContent className="mt-3 space-y-3">
                   {apps
                     .filter((app) => app.permissions.length > 0)
-                    .map((app) => (
-                      <div
-                        key={app.id}
-                        className="mb-2 rounded border p-2 last:mb-0"
-                      >
-                        <p className="text-muted-foreground mb-1 text-xs font-medium">
-                          {app.name}
-                        </p>
-                        <div className="space-y-1.5">
-                          {app.permissions.map((p) => {
-                            const key = `${app.id}:${p.name}`;
-                            const viaRole = roleGrantsPermission(
-                              app.id,
-                              p.name,
-                            );
-                            const denied = isDenied(app.id, p.name);
-                            const effective = !denied && (viaRole || hasGrant(app.id, p.name));
-                            return (
-                              <label
-                                key={p.id}
-                                className="flex items-center gap-2 text-sm"
-                              >
-                                <Checkbox
-                                  checked={effective}
-                                  disabled={permSaving === key}
-                                  onCheckedChange={() => togglePerm(app.id, p, viaRole)}
-                                />
-                                {permSaving === key ? "…" : p.label}
-                                {viaRole && !denied && (
-                                  <Badge
-                                    variant="outline"
-                                    className="px-1 py-0 text-[10px] font-normal"
-                                  >
-                                    via rôle
-                                  </Badge>
-                                )}
-                                {denied && (
-                                  <Badge
-                                    variant="destructive"
-                                    className="px-1 py-0 text-[10px] font-normal"
-                                  >
-                                    refusé{viaRole ? " (bloque le rôle)" : ""}
-                                  </Badge>
-                                )}
-                              </label>
-                            );
-                          })}
+                    .map((app) => {
+                      const groups = new Map<string, AdminPermission[]>();
+                      for (const p of app.permissions) {
+                        const key = p.group?.trim() || "Autres";
+                        if (!groups.has(key)) groups.set(key, []);
+                        groups.get(key)!.push(p);
+                      }
+                      return (
+                        <div key={app.id} className="rounded border p-2">
+                          <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
+                            {app.name}
+                          </p>
+                          <div className="space-y-2">
+                            {[...groups.entries()].map(([groupTitle, groupPerms]) => (
+                              <div key={groupTitle} className="rounded bg-muted/30 p-2">
+                                <p className="mb-1.5 text-xs font-medium">{groupTitle}</p>
+                                <div className="space-y-1.5">
+                                  {groupPerms.map((p) => {
+                                    const key = `${app.id}:${p.name}`;
+                                    const viaRole = roleGrantsPermission(
+                                      app.id,
+                                      p.name,
+                                    );
+                                    const denied = isDenied(app.id, p.name);
+                                    const effective = !denied && (viaRole || hasGrant(app.id, p.name));
+                                    return (
+                                      <label
+                                        key={p.id}
+                                        className="flex items-center gap-2 text-sm"
+                                      >
+                                        <Checkbox
+                                          checked={effective}
+                                          disabled={permSaving === key}
+                                          onCheckedChange={() => togglePerm(app.id, p, viaRole)}
+                                        />
+                                        {permSaving === key ? "…" : p.label}
+                                        {!!p.default_on && (
+                                          <Badge
+                                            variant="secondary"
+                                            className="px-1 py-0 text-[10px] font-normal"
+                                          >
+                                            par défaut
+                                          </Badge>
+                                        )}
+                                        {viaRole && !denied && (
+                                          <Badge
+                                            variant="outline"
+                                            className="px-1 py-0 text-[10px] font-normal"
+                                          >
+                                            via rôle
+                                          </Badge>
+                                        )}
+                                        {denied && (
+                                          <Badge
+                                            variant="destructive"
+                                            className="px-1 py-0 text-[10px] font-normal"
+                                          >
+                                            refusé{viaRole ? " (bloque le rôle)" : ""}
+                                          </Badge>
+                                        )}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                 </CollapsibleContent>
               </Collapsible>
             )}
