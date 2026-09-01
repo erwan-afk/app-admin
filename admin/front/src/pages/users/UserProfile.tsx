@@ -229,12 +229,19 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
     if (!grantsByApp.has(g.app_id)) grantsByApp.set(g.app_id, { app_name: g.app_slug, grants: [] });
     grantsByApp.get(g.app_id)!.grants.push(g);
   }
+  // Refus individuels (granted=0) — priment sur ce que le rôle accorderait,
+  // cf. Server::getUserPermissions() côté auth_global.
+  const deniedByApp = new Map<string, { app_name: string; grants: typeof app_grants }>();
+  for (const g of app_grants.filter((g) => g.granted === 0)) {
+    if (!deniedByApp.has(g.app_id)) deniedByApp.set(g.app_id, { app_name: g.app_slug, grants: [] });
+    deniedByApp.get(g.app_id)!.grants.push(g);
+  }
   const rolesByApp = new Map<string, { app_name: string; roles: typeof app_roles }>();
   for (const r of app_roles) {
     if (!rolesByApp.has(r.app_id)) rolesByApp.set(r.app_id, { app_name: r.app_name, roles: [] });
     rolesByApp.get(r.app_id)!.roles.push(r);
   }
-  const appIds = new Set([...rolesByApp.keys(), ...grantsByApp.keys()]);
+  const appIds = new Set([...rolesByApp.keys(), ...grantsByApp.keys(), ...deniedByApp.keys()]);
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -491,10 +498,11 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
             Array.from(appIds).map((appId) => {
               const roles = rolesByApp.get(appId);
               const grants = grantsByApp.get(appId);
+              const denied = deniedByApp.get(appId);
               return (
                 <Card key={appId}>
                   <CardContent className="space-y-2 p-4 text-sm">
-                    <p className="font-medium">{roles?.app_name || grants?.app_name || appId}</p>
+                    <p className="font-medium">{roles?.app_name || grants?.app_name || denied?.app_name || appId}</p>
                     {roles && roles.roles.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {roles.roles.map((r) => (
@@ -509,6 +517,15 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
                         {grants.grants.map((g) => (
                           <Badge key={g.permission_id} variant="outline">
                             {g.perm_label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {denied && denied.grants.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {denied.grants.map((g) => (
+                          <Badge key={g.permission_id} variant="destructive">
+                            {g.perm_label} — refusé
                           </Badge>
                         ))}
                       </div>

@@ -15,6 +15,61 @@ interface Props {
   onChanged: () => void;
 }
 
+function groupPerms(perms: AppPermission[]): Map<string, AppPermission[]> {
+  const groups = new Map<string, AppPermission[]>();
+  for (const p of perms) {
+    const key = p.group?.trim() || "Autres";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(p);
+  }
+  return groups;
+}
+
+function PermGroupBlock({
+  title,
+  perms,
+  checked,
+  onTogglePerm,
+  onToggleGroup,
+}: {
+  title: string;
+  perms: AppPermission[];
+  checked: Set<number>;
+  onTogglePerm: (id: number, on: boolean) => void;
+  onToggleGroup: (perms: AppPermission[], on: boolean) => void;
+}) {
+  const checkedCount = perms.filter((p) => checked.has(p.id)).length;
+  const groupState: boolean | "indeterminate" =
+    checkedCount === 0 ? false : checkedCount === perms.length ? true : "indeterminate";
+
+  return (
+    <div className="rounded border">
+      <label className="bg-muted/40 flex items-center gap-2 border-b px-2 py-1.5 text-sm font-medium">
+        <Checkbox
+          checked={groupState}
+          onCheckedChange={(c) => onToggleGroup(perms, !!c)}
+        />
+        {title}
+        <span className="text-muted-foreground ml-auto text-xs font-normal">
+          {checkedCount}/{perms.length}
+        </span>
+      </label>
+      <div className="grid grid-cols-2 gap-2 p-2">
+        {perms.map((p) => (
+          <label key={p.id} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={checked.has(p.id)}
+              onCheckedChange={(c) => onTogglePerm(p.id, !!c)}
+            />
+            <span>{p.label}</span>
+            <span className="text-muted-foreground font-mono text-xs">{p.name}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AppRolesTab({ app, perms, onChanged }: Props) {
   const [openRole, setOpenRole] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set());
@@ -46,6 +101,17 @@ export function AppRolesTab({ app, perms, onChanged }: Props) {
       const next = new Set(prev);
       if (on) next.add(permId);
       else next.delete(permId);
+      return next;
+    });
+  }
+
+  function toggleGroup(groupPerms: AppPermission[], on: boolean) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      for (const p of groupPerms) {
+        if (on) next.add(p.id);
+        else next.delete(p.id);
+      }
       return next;
     });
   }
@@ -118,7 +184,7 @@ export function AppRolesTab({ app, perms, onChanged }: Props) {
   }
 
   return (
-    <div className="max-w-2xl space-y-2">
+    <div className="max-w-3xl space-y-2">
       {app.roles.length === 0 && (
         <p className="text-muted-foreground text-sm">Aucun rôle défini pour cette application.</p>
       )}
@@ -179,17 +245,35 @@ export function AppRolesTab({ app, perms, onChanged }: Props) {
                   <p className="text-muted-foreground mb-2 text-xs">
                     Cochez les permissions accordées par ce rôle :
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {perms.map((p) => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={checked.has(p.id)}
-                          onCheckedChange={(c) => togglePerm(p.id, !!c)}
-                        />
-                        <span>{p.label}</span>
-                        <span className="text-muted-foreground font-mono text-xs">{p.name}</span>
-                      </label>
-                    ))}
+                  <div className="space-y-2">
+                    {(() => {
+                      const defaultPerms = perms.filter((p) => p.default_on);
+                      const rest = perms.filter((p) => !p.default_on);
+                      const groups = groupPerms(rest);
+                      return (
+                        <>
+                          {defaultPerms.length > 0 && (
+                            <PermGroupBlock
+                              title="Accès par défaut"
+                              perms={defaultPerms}
+                              checked={checked}
+                              onTogglePerm={togglePerm}
+                              onToggleGroup={toggleGroup}
+                            />
+                          )}
+                          {[...groups.entries()].map(([title, groupPermsList]) => (
+                            <PermGroupBlock
+                              key={title}
+                              title={title}
+                              perms={groupPermsList}
+                              checked={checked}
+                              onTogglePerm={togglePerm}
+                              onToggleGroup={toggleGroup}
+                            />
+                          ))}
+                        </>
+                      );
+                    })()}
                   </div>
                   <Button size="sm" className="mt-3" onClick={() => savePerms(r.id)}>
                     Enregistrer les permissions

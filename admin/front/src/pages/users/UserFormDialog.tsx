@@ -162,24 +162,53 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
     }
   }
 
-  // ── Permissions par application (direct grants) ──
-  const hasGrant = (appId: string, permName: string) =>
-    appGrants.some(
-      (g) => g.app_id === appId && g.perm_name === permName && g.granted === 1,
-    );
+  // ── Permissions par application (grants individuels, additifs OU refus
+  // explicite au-dessus du rôle — cf. Server::getUserPermissions() côté
+  // auth_global qui soustrait désormais les granted=0) ──
+  const directGrant = (appId: string, permName: string) =>
+    appGrants.find((g) => g.app_id === appId && g.perm_name === permName);
 
-  async function togglePerm(appId: string, perm: AdminPermission) {
+  const isDenied = (appId: string, permName: string) =>
+    directGrant(appId, permName)?.granted === 0;
+
+  const hasGrant = (appId: string, permName: string) =>
+    directGrant(appId, permName)?.granted === 1;
+
+  async function togglePerm(appId: string, perm: AdminPermission, viaRole: boolean) {
     if (!isEdit) return;
     const key = `${appId}:${perm.name}`;
+    const effective = !isDenied(appId, perm.name) && (viaRole || hasGrant(appId, perm.name));
     setPermSaving(key);
     try {
-      if (hasGrant(appId, perm.name)) {
+      if (effective) {
+        if (viaRole) {
+          // Le rôle l'accorde : un simple "delete" ne suffit pas à la
+          // retirer, il faut un refus explicite qui prime dessus.
+          await api.post("upsert_app_grant", {
+            user_id: userId,
+            app_id: appId,
+            permission_id: perm.id,
+            granted: 0,
+            note: "Refusé individuellement depuis la console admin",
+          });
+          toast.success(`Permission "${perm.label}" refusée pour cet utilisateur`);
+        } else {
+          await api.del("delete_app_grant", {
+            user_id: userId,
+            app_id: appId,
+            permission_id: perm.id,
+          });
+          toast.success(`Permission "${perm.label}" retirée`);
+        }
+      } else if (isDenied(appId, perm.name)) {
+        // Retire le refus explicite — la permission redevient ce que le
+        // rôle décide (accordée ou non).
         await api.del("delete_app_grant", {
           user_id: userId,
           app_id: appId,
           permission_id: perm.id,
         });
-        toast.success(`Permission "${perm.label}" retirée`);
+        toast.success(`Refus retiré pour "${perm.label}"`);
       } else {
         await api.post("upsert_app_grant", {
           user_id: userId,
@@ -559,23 +588,33 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
                               app.id,
                               p.name,
                             );
+                            const denied = isDenied(app.id, p.name);
+                            const effective = !denied && (viaRole || hasGrant(app.id, p.name));
                             return (
                               <label
                                 key={p.id}
                                 className="flex items-center gap-2 text-sm"
                               >
                                 <Checkbox
-                                  checked={viaRole || hasGrant(app.id, p.name)}
-                                  disabled={viaRole || permSaving === key}
-                                  onCheckedChange={() => togglePerm(app.id, p)}
+                                  checked={effective}
+                                  disabled={permSaving === key}
+                                  onCheckedChange={() => togglePerm(app.id, p, viaRole)}
                                 />
                                 {permSaving === key ? "…" : p.label}
-                                {viaRole && (
+                                {viaRole && !denied && (
                                   <Badge
                                     variant="outline"
                                     className="px-1 py-0 text-[10px] font-normal"
                                   >
                                     via rôle
+                                  </Badge>
+                                )}
+                                {denied && (
+                                  <Badge
+                                    variant="destructive"
+                                    className="px-1 py-0 text-[10px] font-normal"
+                                  >
+                                    refusé{viaRole ? " (bloque le rôle)" : ""}
                                   </Badge>
                                 )}
                               </label>

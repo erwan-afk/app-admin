@@ -54,6 +54,8 @@ export interface AppPermission {
   name: string;
   label: string;
   role_count: number;
+  group: string | null;
+  default_on: number;
 }
 
 export interface RoleWithPermissions {

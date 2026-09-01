@@ -10,8 +10,14 @@ use Jasny\Immutable;
  * auth_global — SSO Broker.
  *
  * Lives on the client application (Report, Team, Marketing…).
- * No shared secret — validates JWTs locally using the server's public key.
- * No network call needed to verify a user's session.
+ * No shared secret. Verification is delegated to the server's
+ * `/auth/verify` endpoint (one network call per request, memoized) rather
+ * than decoded locally: the previous local decode never actually checked
+ * the RS256 signature (`$publicKey` was accepted but unused), a latent gap
+ * closed by aligning on the same pattern already used by app-intranet's
+ * AuthClient — and the only way an individual token revocation
+ * (`users.tokens_revoked_at`, cf. auth_global migration 056) can take
+ * effect immediately instead of waiting for local exp.
  */
 class Broker
 {
@@ -32,8 +38,11 @@ class Broker
     /** The JWT token, stored in cookie or session. */
     protected ?string $jwt = null;
 
-    /** Decoded JWT claims cache. */
+    /** Decoded JWT claims cache (from the last /auth/verify call). */
     protected ?array $claims = null;
+
+    /** null = not yet checked against /auth/verify this request; bool = result. */
+    protected ?bool $remoteVerified = null;
 
     /** @var \ArrayAccess<string,mixed> */
     protected \ArrayAccess $state;
@@ -210,8 +219,9 @@ class Broker
     }
 
     /**
-     * Check if the user is authenticated (has a valid, non-expired JWT).
-     * This is a LOCAL check — no network call.
+     * Check if the user is authenticated. Verified against the server's
+     * `/auth/verify` (signature, expiry, revocation — cf. class docblock),
+     * memoized per request.
      */
     public function isAuthenticated(): bool
     {
@@ -221,36 +231,78 @@ class Broker
             return false;
         }
 
-        $claims = $this->decodeJwt($this->jwt);
-        if ($claims === null) {
-            return false;
-        }
-
-        return ($claims["exp"] ?? 0) > time();
+        return $this->verifyRemote() !== null;
     }
 
     /**
-     * Get the current user's claims from the JWT (no network call).
+     * Get the current user's claims, as returned by `/auth/verify`
+     * (Server::getUserFromToken() shape — note "id" not "sub", "permissions"
+     * not "perms", unlike the raw JWT claims this used to decode locally).
      *
-     * @return array|null  { id, email, name, node_id, node_code, roles, perms, … }
+     * @return array|null  { id, email, name, node_id, node_code, roles, permissions, … }
      */
     public function getUser(): ?array
     {
-        if (!$this->isAuthenticated()) {
+        $this->initialize();
+
+        if ($this->jwt === null) {
             return null;
         }
 
-        if ($this->claims !== null) {
-            return $this->claims;
+        return $this->verifyRemote();
+    }
+
+    /**
+     * Verify the stored JWT against the server, memoized for the lifetime
+     * of this instance (one call per request regardless of how many times
+     * isAuthenticated()/getUser()/hasPermission()/hasRole() are called).
+     *
+     * Deliberately builds the Authorization header from $this->jwt directly
+     * rather than going through request()/getBearerToken(): the latter
+     * calls isAuthenticated(), which would recurse into this method.
+     */
+    protected function verifyRemote(): ?array
+    {
+        if ($this->remoteVerified !== null) {
+            return $this->remoteVerified ? $this->claims : null;
         }
 
-        $this->claims = $this->decodeJwt($this->jwt);
+        $headers = [
+            "Accept: application/json",
+            "Authorization: Bearer " . $this->jwt,
+        ];
 
+        try {
+            [
+                "httpCode" => $httpCode,
+                "contentType" => $contentType,
+                "body" => $body,
+            ] = $this->getCurl()->request(
+                "GET",
+                $this->getRequestUrl("/auth/verify"),
+                $headers,
+                "",
+            );
+            $data = $this->handleResponse($httpCode, $contentType, $body);
+        } catch (\Exception $e) {
+            $this->remoteVerified = false;
+            $this->claims = null;
+            return null;
+        }
+
+        if (!is_array($data) || empty($data["valid"]) || !isset($data["user"]) || !is_array($data["user"])) {
+            $this->remoteVerified = false;
+            $this->claims = null;
+            return null;
+        }
+
+        $this->remoteVerified = true;
+        $this->claims = $data["user"];
         return $this->claims;
     }
 
     /**
-     * Check if the current user has a specific permission (local check).
+     * Check if the current user has a specific permission.
      */
     public function hasPermission(string $permission): bool
     {
@@ -259,7 +311,11 @@ class Broker
             return false;
         }
 
-        return in_array($permission, $user["perms"] ?? [], true);
+        // Server::getUserFromToken() (auth_global) names this key
+        // "permissions", not "perms" — that was the raw JWT claim name back
+        // when this class decoded the token locally; /auth/verify wraps it
+        // differently.
+        return in_array($permission, $user["permissions"] ?? [], true);
     }
 
     /**
@@ -286,6 +342,7 @@ class Broker
         );
         $this->jwt = null;
         $this->claims = null;
+        $this->remoteVerified = null;
     }
 
     // ============================================================
@@ -474,7 +531,8 @@ class Broker
         }
 
         $this->jwt = $tokens["access_token"];
-        $this->claims = $this->decodeJwt($this->jwt);
+        $this->claims = null;
+        $this->remoteVerified = null; // force a fresh /auth/verify for the new token
         $this->state[$this->getCookieName("jwt")] = $this->jwt;
 
         if (!empty($tokens["refresh_token"])) {
@@ -491,29 +549,6 @@ class Broker
     protected function base64Url(string $data): string
     {
         return rtrim(strtr(base64_encode($data), "+/", "-_"), "=");
-    }
-
-    /**
-     * Decode a JWT without verifying the signature (local, fast).
-     * For signature verification, call the server's /auth/verify endpoint.
-     */
-    protected function decodeJwt(string $token): ?array
-    {
-        $parts = explode(".", $token);
-        if (count($parts) !== 3) {
-            return null;
-        }
-
-        try {
-            $payload = json_decode(
-                base64_decode(strtr($parts[1], "-_", "+/"), true),
-                true,
-            );
-
-            return is_array($payload) ? $payload : null;
-        } catch (\Exception $e) {
-            return null;
-        }
     }
 
     /**
