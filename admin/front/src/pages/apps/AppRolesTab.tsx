@@ -62,6 +62,11 @@ function PermGroupBlock({
               onCheckedChange={(c) => onTogglePerm(p.id, !!c)}
             />
             <span>{p.label}</span>
+            {!!p.default_on && (
+              <Badge variant="secondary" className="px-1 py-0 text-[10px] font-normal">
+                par défaut
+              </Badge>
+            )}
             <span className="text-muted-foreground font-mono text-xs">{p.name}</span>
           </label>
         ))}
@@ -247,20 +252,9 @@ export function AppRolesTab({ app, perms, onChanged }: Props) {
                   </p>
                   <div className="space-y-2">
                     {(() => {
-                      const defaultPerms = perms.filter((p) => p.default_on);
-                      const rest = perms.filter((p) => !p.default_on);
-                      const groups = groupPerms(rest);
+                      const groups = groupPerms(perms);
                       return (
                         <>
-                          {defaultPerms.length > 0 && (
-                            <PermGroupBlock
-                              title="Accès par défaut"
-                              perms={defaultPerms}
-                              checked={checked}
-                              onTogglePerm={togglePerm}
-                              onToggleGroup={toggleGroup}
-                            />
-                          )}
                           {[...groups.entries()].map(([title, groupPermsList]) => (
                             <PermGroupBlock
                               key={title}
