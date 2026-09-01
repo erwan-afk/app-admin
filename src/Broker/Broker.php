@@ -257,20 +257,19 @@ class Broker
      * of this instance (one call per request regardless of how many times
      * isAuthenticated()/getUser()/hasPermission()/hasRole() are called).
      *
-     * Deliberately builds the Authorization header from $this->jwt directly
-     * rather than going through request()/getBearerToken(): the latter
-     * calls isAuthenticated(), which would recurse into this method.
+     * ⚠️ Token passed as a `?token=` QUERY PARAM, not an Authorization
+     * header — verified end-to-end against preprod (2026-09-01): the header
+     * form silently returns `{"valid":false}` on this server (getallheaders()
+     * apparently unreliable under this FrankenPHP setup), while the query
+     * param works. Same convention already used by app-intranet's
+     * AuthClient::verify() — aligning on it here rather than chasing why the
+     * header path fails server-side.
      */
     protected function verifyRemote(): ?array
     {
         if ($this->remoteVerified !== null) {
             return $this->remoteVerified ? $this->claims : null;
         }
-
-        $headers = [
-            "Accept: application/json",
-            "Authorization: Bearer " . $this->jwt,
-        ];
 
         try {
             [
@@ -279,8 +278,8 @@ class Broker
                 "body" => $body,
             ] = $this->getCurl()->request(
                 "GET",
-                $this->getRequestUrl("/auth/verify"),
-                $headers,
+                $this->getRequestUrl("/auth/verify", ["token" => $this->jwt]),
+                ["Accept: application/json"],
                 "",
             );
             $data = $this->handleResponse($httpCode, $contentType, $body);
