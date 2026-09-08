@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Copy, KeyRound, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowLeftRight, Copy, KeyRound, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,13 @@ import type { AppDetail } from "./types";
  * Onglet Informations d'un client de service (client_credentials, app-à-app).
  * Contrairement à une application utilisateur, un service n'a ni redirect_uri,
  * ni rôles/permissions (pas d'utilisateurs) : sa raison d'être est la clé secrète.
+ *
+ * La section « Reclasser en application » existe parce que `type` est DÉRIVÉ
+ * (AppController::deriveType) et non stocké : un client confidentiel sans
+ * redirect_uri est vu comme un service. Un client arrivé ici par accident —
+ * typiquement une app à qui on a généré une clé secrète avant de renseigner son
+ * URL de retour — n'avait aucun chemin de retour vers /apps. C'est ce
+ * cul-de-sac que cette section supprime (piège vécu en prod le 2026-09-08).
  */
 export function ServiceInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () => void }) {
   const [name, setName] = useState(app.name);
@@ -40,6 +48,9 @@ export function ServiceInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () =
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const [convertUrl, setConvertUrl] = useState("");
+  const [converting, setConverting] = useState(false);
+  const navigate = useNavigate();
 
   async function handleRegenerateSecret() {
     const warning = app.has_secret
@@ -67,6 +78,21 @@ export function ServiceInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () =
       toast.success("Clé copiée dans le presse-papiers");
     } catch {
       toast.error("Copie impossible — sélectionnez et copiez manuellement");
+    }
+  }
+
+  /** Renseigner un redirect_uri suffit à faire redériver le type en « app ». */
+  async function convertToApp(e: React.FormEvent) {
+    e.preventDefault();
+    setConverting(true);
+    try {
+      await api.put("update_app", { id: app.id, redirect_uri: convertUrl.trim() });
+      toast.success(`« ${app.name} » est désormais une application.`);
+      navigate("/apps");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur réseau");
+    } finally {
+      setConverting(false);
     }
   }
 
@@ -168,6 +194,35 @@ export function ServiceInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () =
           Enregistrer
         </Button>
       </form>
+
+      <div className="space-y-3 rounded-lg border border-dashed p-4">
+        <div className="flex items-center gap-2">
+          <ArrowLeftRight className="text-muted-foreground size-4" />
+          <h3 className="text-sm font-medium">Reclasser en application</h3>
+        </div>
+        <p className="text-muted-foreground text-sm">
+          Un client est vu comme un <strong>service</strong> tant qu'il est confidentiel et sans URL
+          de retour. Si celui-ci est en réalité une application utilisateur arrivée ici par erreur,
+          renseignez son URL de callback : il repassera dans <strong>Applications</strong>, avec ses
+          rôles et permissions.
+        </p>
+        <form onSubmit={convertToApp} className="flex items-end gap-2">
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="svc-convert-url">URL du broker (redirect_uri)</Label>
+            <Input
+              id="svc-convert-url"
+              type="url"
+              required
+              placeholder="https://…/callback"
+              value={convertUrl}
+              onChange={(e) => setConvertUrl(e.target.value)}
+            />
+          </div>
+          <Button type="submit" variant="outline" disabled={converting}>
+            Reclasser
+          </Button>
+        </form>
+      </div>
 
       <Dialog open={revealedSecret !== null} onOpenChange={(o) => !o && setRevealedSecret(null)}>
         <DialogContent className="sm:max-w-lg">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Copy, KeyRound, RefreshCw } from "lucide-react";
+import { ChevronDown, Copy, KeyRound, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +42,25 @@ export function AppInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () => vo
   // secret existe déjà, pour ne pas cacher une clé active.
   const [showSecurity, setShowSecurity] = useState(app.has_secret);
 
+  // `type` n'est pas une colonne : AppController::deriveType() le recalcule à
+  // chaque lecture et renvoie « service » dès qu'un client est confidentiel SANS
+  // redirect_uri. Or générer une clé force is_confidential=1 côté serveur. Sur une
+  // app dont l'URL du broker est vide, ce bouton faisait donc basculer l'app dans
+  // /services, d'où elle ne pouvait plus revenir (ServiceInfoTab n'exposait pas de
+  // champ redirect_uri) — piège vécu en prod le 2026-09-08 sur « spreadr-admin ».
+  // Exiger l'URL *enregistrée* d'abord rend ce basculement impossible.
+  const redirectSaved = (app.redirect_uri ?? "").trim() !== "";
+
   async function handleRegenerateSecret() {
+    if (!redirectSaved) {
+      toast.error(
+        redirect.trim() !== ""
+          ? "Enregistrez d'abord l'URL du broker : sans elle, l'application basculerait dans Services."
+          : "Renseignez l'URL du broker, puis Enregistrer, avant de générer une clé : sans elle, l'application basculerait dans Services.",
+      );
+      return;
+    }
+
     const warning = app.has_secret
       ? `Régénérer la clé secrète de « ${app.name} » ? L'ancienne clé cessera de fonctionner immédiatement — toute intégration qui l'utilise devra être mise à jour.`
       : `Générer une clé secrète pour « ${app.name} » ? Cette application deviendra un client OAuth2 confidentiel.`;
@@ -190,7 +208,22 @@ export function AppInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () => vo
               régénération. Pour un appel d'application à application sans utilisateur, créez plutôt
               un <strong>Service</strong>.
             </p>
-            <Button type="button" variant="outline" disabled={regenerating} onClick={handleRegenerateSecret}>
+            {!redirectSaved && (
+              <p className="flex items-start gap-1.5 text-sm text-amber-600 dark:text-amber-500">
+                <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  Renseignez d'abord l'<strong>URL du broker</strong> ci-dessus et enregistrez. Une
+                  clé secrète rend le client confidentiel : sans URL de retour, il serait reclassé
+                  comme <strong>Service</strong> et quitterait cette section.
+                </span>
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={regenerating || !redirectSaved}
+              onClick={handleRegenerateSecret}
+            >
               <RefreshCw className="size-4" />
               {app.has_secret ? "Régénérer la clé secrète" : "Générer une clé secrète"}
             </Button>
