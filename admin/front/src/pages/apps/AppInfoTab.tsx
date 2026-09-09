@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Copy, KeyRound, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, Copy, KeyRound, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +36,7 @@ export function AppInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () => vo
   const [environment, setEnvironment] = useState(app.environment ?? NO_ENV);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [revertingToPublic, setRevertingToPublic] = useState(false);
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   // Le secret est une option avancée pour une app (flux confidentiel server-side) :
   // par défaut une app est publique/PKCE et n'en a pas besoin. Déplié d'office si un
@@ -76,6 +77,33 @@ export function AppInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () => vo
       toast.error(e instanceof Error ? e.message : "Erreur réseau");
     } finally {
       setRegenerating(false);
+    }
+  }
+
+  // Repasser un client confidentiel en public (PKCE) : `ClientRepository::
+  // validateClient` renvoie `true` dès que `is_confidential` est faux, quel que
+  // soit l'état de `secret` en base — nul besoin de l'effacer, l'API update_app
+  // existante suffit. Sortie de secours pour une app qui n'a jamais dû devenir
+  // confidentielle (typiquement un client PKCE qui n'envoie pas de
+  // client_secret à /oauth/token) : régénérée par erreur, elle échoue alors en
+  // invalid_client — piège vécu en prod le 2026-09-09 sur « spreadr-admin ».
+  async function handleRevertToPublic() {
+    if (
+      !confirm(
+        `Repasser « ${app.name} » en client public (PKCE) ? Toute intégration qui envoie encore un client_secret continuera de fonctionner ; celles qui n'en envoient pas (flux PKCE standard) redeviendront acceptées.`,
+      )
+    )
+      return;
+
+    setRevertingToPublic(true);
+    try {
+      await api.put("update_app", { id: app.id, is_confidential: 0 });
+      toast.success("Application repassée en client public");
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur réseau");
+    } finally {
+      setRevertingToPublic(false);
     }
   }
 
@@ -227,6 +255,24 @@ export function AppInfoTab({ app, onSaved }: { app: AppDetail; onSaved: () => vo
               <RefreshCw className="size-4" />
               {app.has_secret ? "Régénérer la clé secrète" : "Générer une clé secrète"}
             </Button>
+            {app.has_secret && (
+              <div className="space-y-1.5 border-t pt-3">
+                <p className="text-muted-foreground text-sm">
+                  Si cette application ne devait en réalité jamais devenir confidentielle (cas d'un
+                  client PKCE qui n'envoie pas de <code className="text-xs">client_secret</code>),
+                  la repasser en public répare l'authentification sans perdre sa configuration.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={revertingToPublic}
+                  onClick={handleRevertToPublic}
+                >
+                  <ArrowLeftRight className="size-4" />
+                  Repasser en client public (PKCE)
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
