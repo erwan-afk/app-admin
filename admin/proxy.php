@@ -73,6 +73,9 @@ $actionMap = [
     "update_user" => ["PUT", "/users/_ID_"],
     "set_user_password" => ["PUT", "/users/_ID_/password"],
     "regenerate_user_password" => ["POST", "/users/_ID_/regenerate-password"],
+    // Déconnexion forcée : révoque tous les tokens émis sans désactiver le
+    // compte (finding C8, cf. TokenRevoker côté auth_global).
+    "revoke_user_tokens" => ["POST", "/users/_ID_/revoke-tokens"],
     "delete_user" => ["DELETE", "/users/_ID_"],
     "assign_user" => ["POST", "/users/assignments"],
     "unassign_user" => ["DELETE", "/users/assignments"],

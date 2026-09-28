@@ -12,6 +12,7 @@ import {
   Copy,
   Plus,
   X,
+  LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +113,7 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
   const [data, setData] = useState<UserDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [revealedPassword, setRevealedPassword] = useState<string | null>(null);
   const [newProEmail, setNewProEmail] = useState("");
   const [newProEmailLabel, setNewProEmailLabel] = useState("");
@@ -158,6 +160,26 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
       toast.error(e instanceof Error ? e.message : "Erreur réseau");
     } finally {
       setRegenerating(false);
+    }
+  }
+
+  async function handleRevokeTokens() {
+    if (!data) return;
+    const name = `${data.user.first_name} ${data.user.last_name}`;
+    if (
+      !confirm(
+        `Déconnecter « ${name} » de toutes les apps ? Sa session en cours sera invalidée immédiatement, sans désactiver le compte.`,
+      )
+    )
+      return;
+    setRevoking(true);
+    try {
+      await api.post("revoke_user_tokens", { id: userId });
+      toast.success("Session(s) révoquée(s)");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur réseau");
+    } finally {
+      setRevoking(false);
     }
   }
 
@@ -567,6 +589,21 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
               <div>
                 <p className="text-muted-foreground text-xs">Verrouillé jusqu'à</p>
                 <p className="font-medium">{fmtDateTime(credentials?.locked_until ?? null)}</p>
+              </div>
+              <div className="col-span-2 border-t pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                  disabled={revoking}
+                  onClick={handleRevokeTokens}
+                >
+                  <LogOut className="size-3.5" /> Déconnecter de toutes les apps
+                </Button>
+                <p className="text-muted-foreground mt-1.5 text-xs">
+                  Invalide immédiatement toutes les sessions actives (toutes apps confondues) sans
+                  désactiver le compte.
+                </p>
               </div>
             </CardContent>
           </Card>
