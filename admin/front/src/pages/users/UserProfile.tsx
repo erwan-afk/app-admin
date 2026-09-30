@@ -81,7 +81,16 @@ function fmtDate(d: string | null): string {
 
 function fmtDateTime(d: string | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  // auth_global écrit ces dates en heure serveur (UTC) au format naïf
+  // "YYYY-MM-DD HH:MM:SS", sans fuseau : `new Date()` les lirait comme
+  // heure locale du navigateur et n'appliquerait aucun décalage.
+  const naive = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(d);
+  const date = new Date(naive ? `${d.replace(" ", "T")}Z` : d);
+  return date.toLocaleString("fr-FR", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "Europe/Paris",
+  });
 }
 
 function fmtPeriod(period: string): string {
