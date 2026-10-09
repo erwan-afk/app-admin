@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronRight, Trash2, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,12 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -89,8 +83,6 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [gradeSaving, setGradeSaving] = useState<number | null>(null);
-  const [rolesOpen, setRolesOpen] = useState(false);
-  const [permsOpen, setPermsOpen] = useState(false);
 
   async function loadUser() {
     if (!isEdit) return;
@@ -285,11 +277,6 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
     rolesByApp[r.app_id].push(r);
   }
 
-  // Apps ayant des rôles configurés
-  const appIdsWithRoles = new Set(
-    apps.flatMap((a) => (a.roles.length ? [a.id] : [])),
-  );
-
   // Une permission est-elle déjà accordée via un des rôles actifs du user
   // sur cette app ? (indépendant des grants individuels, cf. hasGrant)
   const roleGrantsPermission = (appId: string, permName: string) => {
@@ -454,197 +441,116 @@ export function UserFormDialog({ userId, onClose, onSaved }: Props) {
               </label>
             </div>
 
-            {/* Rôles par application */}
-            {isEdit && apps.length > 0 && (
-              <Collapsible
-                open={rolesOpen}
-                onOpenChange={setRolesOpen}
-                className="rounded-md border p-3"
-              >
-                <CollapsibleTrigger className="flex w-full items-center gap-1.5 text-sm font-medium">
-                  <ChevronRight
-                    className={cn(
-                      "size-4 transition-transform",
-                      rolesOpen && "rotate-90",
-                    )}
-                  />
-                  Rôles applicatifs
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3">
-                  {apps
-                    .filter((app) => appIdsWithRoles.has(app.id))
-                    .map((app) => {
-                      const userRoles = rolesByApp[app.id] || [];
-                      const assignedRoleIds = new Set(
-                        userRoles.map((r) => r.app_role_id),
-                      );
-                      const availableRoles = app.roles.filter(
-                        (r) => !assignedRoleIds.has(r.id),
-                      );
-                      const busy =
-                        roleAction?.appId === app.id &&
-                        roleAction?.type === "assign";
+            {/* Accès applicatifs : par application, un profil (raccourci qui coche un ensemble de permissions) puis les permissions elles-mêmes */}
+            {isEdit && apps.some((a) => a.roles.length > 0 || a.permissions.length > 0) && (
+              <div className="space-y-2 rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">Accès applicatifs</p>
+                  <p className="text-muted-foreground text-xs">
+                    Ce qui compte, ce sont les permissions cochées. Un profil est un
+                    raccourci : il coche d'un coup un ensemble de permissions, mais on
+                    peut aussi cocher les permissions une à une, sans profil.
+                  </p>
+                </div>
+                {apps
+                  .filter((app) => app.roles.length > 0 || app.permissions.length > 0)
+                  .map((app) => {
+                    const userRoles = rolesByApp[app.id] || [];
+                    const assignedRoleIds = new Set(userRoles.map((r) => r.app_role_id));
+                    const availableRoles = app.roles.filter((r) => !assignedRoleIds.has(r.id));
+                    const busy = roleAction?.appId === app.id && roleAction?.type === "assign";
+                    const groups = new Map<string, AdminPermission[]>();
+                    for (const p of app.permissions) {
+                      const key = p.group?.trim() || "Autres";
+                      if (!groups.has(key)) groups.set(key, []);
+                      groups.get(key)!.push(p);
+                    }
+                    return (
+                      <div key={app.id} className="space-y-2 rounded border p-2">
+                        <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+                          {app.name}
+                        </p>
 
-                      return (
-                        <div
-                          key={app.id}
-                          className="mb-2 rounded border p-2 last:mb-0"
-                        >
-                          <p className="text-muted-foreground mb-1 text-xs font-medium">
-                            {app.name}
-                          </p>
-                          {userRoles.length > 0 ? (
-                            <div className="mb-1.5 flex flex-wrap gap-1">
-                              {userRoles.map((r) => (
-                                <Badge
-                                  key={r.id}
-                                  variant="secondary"
-                                  className="gap-0.5 pr-0.5"
+                        {app.roles.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-muted-foreground text-xs">Profil</span>
+                            {userRoles.length === 0 && (
+                              <span className="text-muted-foreground text-xs italic">aucun</span>
+                            )}
+                            {userRoles.map((r) => (
+                              <Badge key={r.id} variant="secondary" className="gap-0.5 pr-0.5">
+                                {r.role_label}
+                                <button
+                                  type="button"
+                                  className="hover:text-red-600 ml-0.5"
+                                  onClick={() => revokeRole(r.id)}
+                                  disabled={roleAction?.assignmentId === r.id}
                                 >
-                                  {r.role_label}
-                                  <button
-                                    type="button"
-                                    className="hover:text-red-600 ml-0.5"
-                                    onClick={() => revokeRole(r.id)}
-                                    disabled={roleAction?.assignmentId === r.id}
-                                  >
-                                    {roleAction?.assignmentId === r.id ? (
-                                      "…"
-                                    ) : (
-                                      <X className="size-3" />
-                                    )}
-                                  </button>
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground mb-1 text-xs italic">
-                              Aucun rôle
-                            </p>
-                          )}
-                          {availableRoles.length > 0 && (
-                            <Select
-                              disabled={busy}
-                              onValueChange={(v) => assignRole(app.id, Number(v))}
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue
-                                  placeholder={busy ? "…" : "+ Ajouter un rôle"}
-                                />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableRoles.map((r) => (
-                                  <SelectItem key={r.id} value={String(r.id)}>
-                                    {r.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                      );
-                    })}
-                  {apps.filter((a) => appIdsWithRoles.has(a.id)).length ===
-                    0 && (
-                    <p className="text-muted-foreground text-xs">
-                      Aucune application avec des rôles configurés.
-                    </p>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-
-            {/* Permissions par application (accès applicatifs) */}
-            {isEdit && apps.some((a) => a.permissions.length > 0) && (
-              <Collapsible
-                open={permsOpen}
-                onOpenChange={setPermsOpen}
-                className="rounded-md border p-3"
-              >
-                <CollapsibleTrigger className="flex w-full items-center gap-1.5 text-sm font-medium">
-                  <ChevronRight
-                    className={cn(
-                      "size-4 transition-transform",
-                      permsOpen && "rotate-90",
-                    )}
-                  />
-                  Permissions applicatives
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3 space-y-3">
-                  {apps
-                    .filter((app) => app.permissions.length > 0)
-                    .map((app) => {
-                      const groups = new Map<string, AdminPermission[]>();
-                      for (const p of app.permissions) {
-                        const key = p.group?.trim() || "Autres";
-                        if (!groups.has(key)) groups.set(key, []);
-                        groups.get(key)!.push(p);
-                      }
-                      return (
-                        <div key={app.id} className="rounded border p-2">
-                          <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
-                            {app.name}
-                          </p>
-                          <div className="space-y-2">
-                            {[...groups.entries()].map(([groupTitle, groupPerms]) => (
-                              <div key={groupTitle} className="rounded bg-muted/30 p-2">
-                                <p className="mb-1.5 text-xs font-medium">{groupTitle}</p>
-                                <div className="space-y-1.5">
-                                  {groupPerms.map((p) => {
-                                    const key = `${app.id}:${p.name}`;
-                                    const viaRole = roleGrantsPermission(
-                                      app.id,
-                                      p.name,
-                                    );
-                                    const denied = isDenied(app.id, p.name);
-                                    const effective = !denied && (viaRole || hasGrant(app.id, p.name));
-                                    return (
-                                      <label
-                                        key={p.id}
-                                        className="flex items-center gap-2 text-sm"
-                                      >
-                                        <Checkbox
-                                          checked={effective}
-                                          disabled={permSaving === key}
-                                          onCheckedChange={() => togglePerm(app.id, p, viaRole)}
-                                        />
-                                        {permSaving === key ? "…" : p.label}
-                                        {!!p.default_on && (
-                                          <Badge
-                                            variant="secondary"
-                                            className="px-1 py-0 text-[10px] font-normal"
-                                          >
-                                            par défaut
-                                          </Badge>
-                                        )}
-                                        {viaRole && !denied && (
-                                          <Badge
-                                            variant="outline"
-                                            className="px-1 py-0 text-[10px] font-normal"
-                                          >
-                                            via rôle
-                                          </Badge>
-                                        )}
-                                        {denied && (
-                                          <Badge
-                                            variant="destructive"
-                                            className="px-1 py-0 text-[10px] font-normal"
-                                          >
-                                            refusé{viaRole ? " (bloque le rôle)" : ""}
-                                          </Badge>
-                                        )}
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                                  {roleAction?.assignmentId === r.id ? "…" : <X className="size-3" />}
+                                </button>
+                              </Badge>
                             ))}
+                            {availableRoles.length > 0 && (
+                              <Select disabled={busy} onValueChange={(v) => assignRole(app.id, Number(v))}>
+                                <SelectTrigger className="h-7 w-auto gap-1 text-xs">
+                                  <SelectValue placeholder={busy ? "…" : "+ Appliquer un profil"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableRoles.map((r) => (
+                                    <SelectItem key={r.id} value={String(r.id)}>
+                                      {r.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </div>
+                        )}
+
+                        <div className="space-y-2">
+                          {[...groups.entries()].map(([groupTitle, groupPerms]) => (
+                            <div key={groupTitle} className="rounded bg-muted/30 p-2">
+                              <p className="mb-1.5 text-xs font-medium">{groupTitle}</p>
+                              <div className="space-y-1.5">
+                                {groupPerms.map((p) => {
+                                  const key = `${app.id}:${p.name}`;
+                                  const viaRole = roleGrantsPermission(app.id, p.name);
+                                  const denied = isDenied(app.id, p.name);
+                                  const effective = !denied && (viaRole || hasGrant(app.id, p.name));
+                                  return (
+                                    <label key={p.id} className="flex items-center gap-2 text-sm">
+                                      <Checkbox
+                                        checked={effective}
+                                        disabled={permSaving === key}
+                                        onCheckedChange={() => togglePerm(app.id, p, viaRole)}
+                                      />
+                                      {permSaving === key ? "…" : p.label}
+                                      {!!p.default_on && (
+                                        <Badge variant="secondary" className="px-1 py-0 text-[10px] font-normal">
+                                          par défaut
+                                        </Badge>
+                                      )}
+                                      {viaRole && !denied && (
+                                        <Badge variant="outline" className="px-1 py-0 text-[10px] font-normal">
+                                          via profil
+                                        </Badge>
+                                      )}
+                                      {denied && (
+                                        <Badge variant="destructive" className="px-1 py-0 text-[10px] font-normal">
+                                          refusé{viaRole ? " (bloque le profil)" : ""}
+                                        </Badge>
+                                      )}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      );
-                    })}
-                </CollapsibleContent>
-              </Collapsible>
+                      </div>
+                    );
+                  })}
+              </div>
             )}
 
             {isEdit && (

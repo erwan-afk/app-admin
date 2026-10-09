@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { euros, MONTHS_FR } from "@/lib/format";
+import { type AppCatalog, computeAccess } from "./access";
 import type { UserDetail, UserDetailResponse } from "./types";
 
 interface Props {
@@ -127,11 +128,17 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
   const [newProEmail, setNewProEmail] = useState("");
   const [newProEmailLabel, setNewProEmailLabel] = useState("");
   const [addingProEmail, setAddingProEmail] = useState(false);
+  const [catalog, setCatalog] = useState<AppCatalog[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setData(await api.get<UserDetailResponse>(`user&id=${userId}`));
+      // Catalogue des profils et permissions : sert à calculer l'accès effectif. Sans lui, on affiche ce qu'on a.
+      api
+        .get<AppCatalog[]>("apps_with_roles")
+        .then(setCatalog)
+        .catch(() => setCatalog([]));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur de chargement");
     } finally {
@@ -255,24 +262,7 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
   const activeProEmails = pro_emails.filter((p) => p.active === 1);
   const primary = assignments.find((a) => a.is_primary === 1 && !a.valid_until) ?? assignments[0];
 
-  const grantsByApp = new Map<string, { app_name: string; grants: typeof app_grants }>();
-  for (const g of app_grants.filter((g) => g.granted === 1)) {
-    if (!grantsByApp.has(g.app_id)) grantsByApp.set(g.app_id, { app_name: g.app_slug, grants: [] });
-    grantsByApp.get(g.app_id)!.grants.push(g);
-  }
-  // Refus individuels (granted=0) — priment sur ce que le rôle accorderait,
-  // cf. Server::getUserPermissions() côté auth_global.
-  const deniedByApp = new Map<string, { app_name: string; grants: typeof app_grants }>();
-  for (const g of app_grants.filter((g) => g.granted === 0)) {
-    if (!deniedByApp.has(g.app_id)) deniedByApp.set(g.app_id, { app_name: g.app_slug, grants: [] });
-    deniedByApp.get(g.app_id)!.grants.push(g);
-  }
-  const rolesByApp = new Map<string, { app_name: string; roles: typeof app_roles }>();
-  for (const r of app_roles) {
-    if (!rolesByApp.has(r.app_id)) rolesByApp.set(r.app_id, { app_name: r.app_name, roles: [] });
-    rolesByApp.get(r.app_id)!.roles.push(r);
-  }
-  const appIds = new Set([...rolesByApp.keys(), ...grantsByApp.keys(), ...deniedByApp.keys()]);
+  const access = computeAccess(catalog, app_roles, app_grants);
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -523,48 +513,65 @@ export function UserProfile({ userId, onEdit, onDeleted }: Props) {
 
         {/* Accès applicatifs */}
         <TabsContent value="acces" className="mt-4 space-y-3">
-          {appIds.size === 0 ? (
+          {access.length === 0 ? (
             <p className="text-muted-foreground text-sm">Aucun accès applicatif.</p>
           ) : (
-            Array.from(appIds).map((appId) => {
-              const roles = rolesByApp.get(appId);
-              const grants = grantsByApp.get(appId);
-              const denied = deniedByApp.get(appId);
-              return (
-                <Card key={appId}>
-                  <CardContent className="space-y-2 p-4 text-sm">
-                    <p className="font-medium">{roles?.app_name || grants?.app_name || denied?.app_name || appId}</p>
-                    {roles && roles.roles.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {roles.roles.map((r) => (
+            access.map((app) => (
+              <Card key={app.appId}>
+                <CardContent className="space-y-3 p-4 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium">{app.appName}</p>
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      Profil
+                      {app.profiles.length > 0 ? (
+                        app.profiles.map((r) => (
                           <Badge key={r.id} variant="secondary">
                             {r.role_label}
                           </Badge>
+                        ))
+                      ) : (
+                        <span className="italic">aucun (droits individuels)</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs text-muted-foreground">
+                      Accès effectif — ce que l'application reçoit
+                    </p>
+                    {app.permissions.length === 0 ? (
+                      <p className="text-xs italic text-muted-foreground">Aucune permission.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {app.permissions.map((p) => (
+                          <li key={p.name} className="flex flex-wrap items-center gap-2">
+                            <span>{p.label}</span>
+                            {p.viaProfiles.map((v) => (
+                              <Badge key={v} variant="outline" className="px-1 py-0 text-[10px] font-normal">
+                                via {v}
+                              </Badge>
+                            ))}
+                            {p.direct && (
+                              <Badge variant="outline" className="px-1 py-0 text-[10px] font-normal">
+                                droit direct
+                              </Badge>
+                            )}
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
-                    {grants && grants.grants.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {grants.grants.map((g) => (
-                          <Badge key={g.permission_id} variant="outline">
-                            {g.perm_label}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {denied && denied.grants.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {denied.grants.map((g) => (
-                          <Badge key={g.permission_id} variant="destructive">
-                            {g.perm_label} — refusé
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })
+                  </div>
+                  {app.denied.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {app.denied.map((d) => (
+                        <Badge key={d.name} variant="destructive">
+                          {d.label} — refusé
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
 
